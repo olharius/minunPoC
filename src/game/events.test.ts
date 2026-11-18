@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getRoute } from '../data/routes'
-import { pirateZoneAt, resolveEvent, shiftArrival, shipPosition } from './events'
+import { eventOutlook, pirateZoneAt, resolveEvent, shiftArrival, shipPosition } from './events'
 import { portOffers } from './market'
 import { newGame } from './newGame'
 import { cargoFactor, monthNews, portOnStrike } from './news'
@@ -108,6 +108,28 @@ describe('events at sea', () => {
     expect(voyageProgress(v, v.departDay)).toBe(0)
     expect(voyageProgress(v, (v.departDay + v.arriveDay) / 2)).toBeCloseTo(0.5)
     expect(voyageProgress(v, v.arriveDay)).toBe(1)
+  })
+
+  it('tells how each choice changes the schedule and the penalty', () => {
+    let s = sailing()
+    const v = s.ships[0].voyage!
+    const arrive = Math.ceil(v.arriveDay)
+    // A tight Express job: due exactly on the current arrival day.
+    v.contract = { id: 'c', cargoId: 'grain', tonnes: 1000, from: v.from, to: v.to, pay: 100000, deadlineDay: arrive, express: true }
+    s = withEvent(s, 'engine')
+    const look = eventOutlook(s)!
+    const self = look.options.find((o) => o.optionId === 'self')!.sure
+    const service = look.options.find((o) => o.optionId === 'service')!.sure
+    expect(self).toMatchObject({ delay: 3, arriveDay: arrive + 3, lateDays: 3, penalty: 30000 })
+    expect(service).toMatchObject({ delay: 1, arriveDay: arrive + 1, lateDays: 1, penalty: 10000 })
+    expect(service.cost).toBeGreaterThan(0)
+    // The forecast matches what really happens.
+    const after = resolveEvent(s, 'self')
+    expect(Math.ceil(after.ships[0].voyage!.arriveDay)).toBe(self.arriveDay)
+
+    const pir = eventOutlook(withEvent(s, 'pirates'))!.options.find((o) => o.optionId === 'risk')!
+    expect(pir.sure.lateDays).toBe(0)
+    expect(pir.risk).toMatchObject({ chance: 0.25, outcome: { delay: 4, lateDays: 4, penalty: 40000 } })
   })
 
   it('knows the pirate zones', () => {
