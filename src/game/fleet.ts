@@ -1,6 +1,7 @@
 import { getPort, PORTS } from '../data/ports'
 import { getShipType, SHIP_TYPES, type ShipType } from '../data/shipTypes'
 import { fmtMoney } from './format'
+import { fleetNameKeys, isNameTaken, nameKey, uniqueName } from './names'
 import { hashString, rng } from './rng'
 import type { GameState, LogEntry, OwnedShip } from './types'
 
@@ -55,11 +56,15 @@ export function usedListings(state: GameState, portId: string): Listing[] {
   const month = Math.floor(state.day / MONTH)
   const r = rng(hashString(`${state.seed}:used:${portId}:${month}`))
   const out: Listing[] = []
+  // Suggested names never clash with the fleet or with each other.
+  const names = fleetNameKeys(state)
   for (let i = 0; i < p.size; i++) {
     const t = r.pick(SHIP_TYPES, (x) => 1 / Math.sqrt(x.price))
     const condition = Math.round(r.range(40, 88))
     const price = Math.round((t.price * (0.25 + 0.6 * (condition / 100)) * r.range(0.9, 1.1)) / 10000) * 10000
-    out.push({ id: `${portId}-${month}-${i}`, portId, typeId: t.id, condition, price, name: r.pick(USED_NAMES) })
+    const name = uniqueName(r.pick(USED_NAMES), names)
+    names.add(nameKey(name))
+    out.push({ id: `${portId}-${month}-${i}`, portId, typeId: t.id, condition, price, name })
   }
   const taken = new Set(state.takenListings)
   return out.filter((l) => !taken.has(l.id))
@@ -85,10 +90,16 @@ function log(s: GameState, e: Omit<LogEntry, 'day'>) {
   s.log = [{ day: s.day, ...e }, ...s.log].slice(0, 80)
 }
 
+/** Throws a Finnish error if the name is empty or already used in the fleet. */
+export function checkShipName(state: GameState, name: string, exceptShipId?: string) {
+  if (!name.trim()) throw new Error('Anna laivalle nimi.')
+  if (isNameTaken(state, name, exceptShipId)) throw new Error(`Laivastossa on jo laiva nimeltä ${name.trim()}. Valitse toinen nimi.`)
+}
+
 function addShip(s: GameState, t: ShipType, name: string, portId: string, condition: number): OwnedShip {
   const ship: OwnedShip = {
     id: `s${s.nextId++}`,
-    name: name.trim() || t.name,
+    name: name.trim().replace(/\s+/g, ' '),
     typeId: t.id,
     portId,
     // Delivered with a third of a tank.
@@ -109,6 +120,7 @@ function pay(s: GameState, amount: number) {
 
 export function buyNewShip(state: GameState, portId: string, typeId: string, name: string): GameState {
   if (!sellsNewShips(portId)) throw new Error('Tässä satamassa ei myydä uusia laivoja.')
+  checkShipName(state, name)
   const s = clone(state)
   const t = getShipType(typeId)
   pay(s, t.price)
@@ -121,11 +133,13 @@ export function buyUsedShip(state: GameState, listingId: string, name: string): 
   const portId = listingId.split('-').slice(0, -2).join('-')
   const listing = usedListings(state, portId).find((l) => l.id === listingId)
   if (!listing) throw new Error('Laiva on jo myyty.')
+  name = name.trim() || listing.name
+  checkShipName(state, name)
   const s = clone(state)
   const t = getShipType(listing.typeId)
   pay(s, listing.price)
   s.takenListings = [...s.takenListings, listing.id]
-  const ship = addShip(s, t, name || listing.name, portId, listing.condition)
+  const ship = addShip(s, t, name, portId, listing.condition)
   log(s, { kind: 'shipyard', text: `Ostettiin käytetty ${t.name.toLowerCase()} ${ship.name} (${getPort(portId).name}, kunto ${listing.condition} %).`, amount: -listing.price })
   return s
 }

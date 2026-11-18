@@ -1,3 +1,4 @@
+import { dedupeShipNames } from './names'
 import type { GameState } from './types'
 
 // Save format. Bump SAVE_VERSION and add a step to `migrate` whenever
@@ -32,6 +33,8 @@ export function parseSave(text: string): SaveFile {
   }
   const migrated = migrate(data.version, data.state)
   validate(migrated)
+  // Older versions allowed two ships with the same name; number the later ones.
+  migrated.ships = dedupeShipNames(migrated.ships)
   return { game: 'minunpoc', version: SAVE_VERSION, savedAt: String(data.savedAt ?? ''), state: migrated }
 }
 
