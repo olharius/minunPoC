@@ -3,6 +3,7 @@ import { getPort } from '../data/ports'
 import { getShipType } from '../data/shipTypes'
 import { creditAvailable } from '../game/bank'
 import { fmtMoney, fmtNum } from '../game/format'
+import { fleetNameKeys, isNameTaken, suggestName } from '../game/names'
 import type { GameState } from '../game/types'
 
 const NAME_IDEAS = ['Aallotar', 'Merituuli', 'Pohjantähti', 'Ahti', 'Vellamo', 'Kotka', 'Ulappa', 'Myrskylintu', 'Revontuli', 'Saaristo', 'Laine', 'Tursas']
@@ -20,8 +21,8 @@ interface Props {
 
 export function BuyDialog({ state, portId, typeId, price, condition, suggestedName, onConfirm, onCancel }: Props) {
   const t = getShipType(typeId)
-  const taken = new Set(state.ships.map((s) => s.name))
-  const [name, setName] = useState(suggestedName ?? NAME_IDEAS.find((n) => !taken.has(n)) ?? `${t.name} ${state.ships.length + 1}`)
+  const [name, setName] = useState(() => suggestName(suggestedName ? [suggestedName] : NAME_IDEAS, fleetNameKeys(state)))
+  const nameTaken = isNameTaken(state, name)
   const shortfall = Math.max(0, price - state.money)
   const borrow = shortfall > 0 ? Math.ceil(shortfall / 10000) * 10000 : 0
   const canAfford = borrow <= creditAvailable(state)
@@ -51,6 +52,7 @@ export function BuyDialog({ state, portId, typeId, price, condition, suggestedNa
           Laivan nimi
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} autoFocus />
         </label>
+        {nameTaken && <p className="error">Laivastossa on jo tämänniminen laiva. Valitse toinen nimi.</p>}
         {borrow > 0 &&
           (canAfford ? (
             <p className="hint">Kassa ei riitä, joten pankista otetaan {fmtMoney(borrow)} lainaa (korko 9 % vuodessa).</p>
@@ -59,7 +61,7 @@ export function BuyDialog({ state, portId, typeId, price, condition, suggestedNa
           ))}
         <div className="row end">
           <button onClick={onCancel}>Peruuta</button>
-          <button className="primary" disabled={!canAfford || !name.trim()} onClick={() => onConfirm(name, borrow)}>
+          <button className="primary" disabled={!canAfford || !name.trim() || nameTaken} onClick={() => onConfirm(name, borrow)}>
             {borrow > 0 ? 'Lainaa ja osta' : 'Osta'}
           </button>
         </div>

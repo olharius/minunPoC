@@ -1,6 +1,7 @@
 import { getPort } from '../../data/ports'
 import { getShipType } from '../../data/shipTypes'
 import { fmtDate, fmtMoney, fmtNum } from '../../game/format'
+import { latePenalty, penaltyPerDay } from '../../game/economy'
 import { getCargo } from '../../game/market'
 import { currentDate } from '../../game/newGame'
 import type { GameState } from '../../game/types'
@@ -63,7 +64,19 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props)
                 <dt>Rahti</dt>
                 <dd>{fmtMoney(v.contract.pay)}</dd>
                 <dt>Määräaika</dt>
-                <dd className={Math.ceil(v.arriveDay) > v.contract.deadlineDay ? 'neg' : ''}>{dateOf(v.contract.deadlineDay)}</dd>
+                <dd className={Math.ceil(v.arriveDay) > v.contract.deadlineDay ? 'neg' : ''}>
+                  {dateOf(v.contract.deadlineDay)}
+                  {v.contract.express && ' · Express'}
+                </dd>
+                {Math.ceil(v.arriveDay) > v.contract.deadlineDay && (
+                  <>
+                    <dt>Sopimussakko</dt>
+                    <dd className="neg">
+                      {Math.ceil(v.arriveDay) - v.contract.deadlineDay} pv × {fmtMoney(penaltyPerDay(v.contract))} ={' '}
+                      {fmtMoney(latePenalty(v.contract, Math.ceil(v.arriveDay) - v.contract.deadlineDay))}
+                    </dd>
+                  </>
+                )}
               </>
             ) : (
               <>

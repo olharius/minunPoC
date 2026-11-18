@@ -1,7 +1,7 @@
 import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
 import { getShipType } from '../data/shipTypes'
-import { effectiveFuelPerDay, fuelPrice, harbourFee, latePay, planVoyage } from './economy'
+import { effectiveFuelPerDay, fuelPrice, harbourFee, latePenalty, penaltyPerDay, planVoyage } from './economy'
 import { fmtMoney, fmtNum } from './format'
 import { getCargo, marketWeek, offerFits, portOffers } from './market'
 import { monthEnd } from './bank'
@@ -142,14 +142,20 @@ function arrive(s: GameState, ship: OwnedShip) {
   const c = v.contract
   if (!c) return
   const late = s.day - c.deadlineDay
-  const pay = Math.round(latePay(c.pay, late) * (v.payFactor ?? 1))
+  const pay = Math.round(c.pay * (v.payFactor ?? 1))
   s.money += pay
   s.ledger.revenue += pay
   const cargo = getCargo(c.cargoId).name.toLowerCase()
+  const kind = c.express ? 'Express-rahti: ' : ''
   if (late > 0) {
-    log(s, { kind: 'late', text: `${ship.name} toimitti ${cargo} ${late} pv myöhässä. Maksu pieneni (${fmtMoney(c.pay)} → ${fmtMoney(pay)}).`, amount: pay })
+    log(s, { kind: 'delivery', text: `${kind}${ship.name} toimitti ${fmtNum(c.tonnes)} t ${cargo} ${late} pv myöhässä.`, amount: pay })
+    const penalty = latePenalty(c, late)
+    s.money -= penalty
+    s.ledger.penalties += penalty
+    const capped = penalty < late * penaltyPerDay(c) ? ' (enintään koko rahtimaksu)' : ''
+    log(s, { kind: 'late', text: `Sopimussakko: ${late} pv × ${fmtMoney(penaltyPerDay(c))}${capped}.`, amount: -penalty })
   } else {
-    log(s, { kind: 'delivery', text: `${ship.name} toimitti ${fmtNum(c.tonnes)} t ${cargo} ajallaan.`, amount: pay })
+    log(s, { kind: 'delivery', text: `${kind}${ship.name} toimitti ${fmtNum(c.tonnes)} t ${cargo} ajallaan.`, amount: pay })
   }
 }
 
