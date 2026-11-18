@@ -157,6 +157,23 @@ export function arrivals(before: GameState, after: GameState): OwnedShip[] {
   return after.ships.filter((s) => s.portId && before.ships.find((b) => b.id === s.id)?.voyage)
 }
 
+export interface IdleNotice {
+  shipId: string
+  reason: 'arrived' | 'repaired'
+}
+
+/** Ships that were busy (at sea or in dock) before this step and now wait in port for orders. */
+export function newlyIdle(before: GameState, after: GameState): IdleNotice[] {
+  const out: IdleNotice[] = []
+  for (const s of after.ships) {
+    const b = before.ships.find((x) => x.id === s.id)
+    if (!b || s.voyage || s.dockUntil !== null || !s.portId) continue
+    if (b.voyage) out.push({ shipId: s.id, reason: 'arrived' })
+    else if (b.dockUntil !== null) out.push({ shipId: s.id, reason: 'repaired' })
+  }
+  return out
+}
+
 export interface DockingResult {
   /** Reached the berth before time ran out. */
   success: boolean

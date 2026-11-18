@@ -4,7 +4,7 @@ import { getRoute } from '../data/routes'
 import { fmtDate, fmtMoney } from '../game/format'
 import { currentDate } from '../game/newGame'
 import { downloadSave, readSaveFile } from '../game/save'
-import { acceptOffer, advanceDay, arrivals, depart, refuel } from '../game/sim'
+import { acceptOffer, advanceDay, arrivals, depart, newlyIdle, refuel, type IdleNotice } from '../game/sim'
 import type { Contract, GameState } from '../game/types'
 import { borrow, repay } from '../game/bank'
 import { buyNewShip, buyUsedShip, sellShip, shipValue, startRepair, usedListings } from '../game/fleet'
@@ -43,7 +43,8 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
   const [previewTo, setPreviewTo] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [speed, setSpeed] = useState(0)
-  const [pauseOnArrival, setPauseOnArrival] = useState(true)
+  const [pauseOnIdle, setPauseOnIdle] = useState(true)
+  const [idleQueue, setIdleQueue] = useState<IdleNotice[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -69,17 +70,16 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
       setRunning(false)
       clock.reset()
     }
-    if (docked.length) {
-      const names = docked.map((s) => `${s.name} saapui satamaan ${getPort(s.portId!).name}`).join('. ')
-      flash(names + '.')
-      if (pauseOnArrival) {
-        setRunning(false)
-        clock.reset()
-        if (docked.length === 1) setSelection({ kind: 'port', id: docked[0].portId! })
-      }
+    const idle = newlyIdle(state, next)
+    if (idle.length && pauseOnIdle) {
+      setIdleQueue((q) => [...q, ...idle])
+      setRunning(false)
+      clock.reset()
+    } else if (idle.length) {
+      flash(idle.map((n) => idleText(next, n)).join(' '))
     }
   }
-  const clock = useClock(running && !pending && !purchase && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0, speed, step)
+  const clock = useClock(running && !pending && !purchase && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0 && idleQueue.length === 0, speed, step)
   const time = state.day + (running ? clock.fraction : 0)
 
   const act = (fn: () => GameState) => {
@@ -151,8 +151,8 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
                 Vie tallennus tiedostoon
               </button>
               <button onClick={() => fileRef.current?.click()}>Lataa tallennustiedosto…</button>
-              <button onClick={() => setPauseOnArrival((p) => !p)}>
-                {pauseOnArrival ? '☑' : '☐'} Pysäytä aika, kun laiva saapuu
+              <button onClick={() => setPauseOnIdle((p) => !p)}>
+                {pauseOnIdle ? '☑' : '☐'} Pysäytä aika, kun laiva jää odottamaan
               </button>
               <button onClick={() => onChange({ ...state, settings: { ...state.settings, manualDocking: !state.settings.manualDocking } })}>
                 {state.settings.manualDocking ? '☑' : '☐'} Ohjaa laivat satamaan itse (minipeli)
@@ -327,6 +327,38 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
         )
       })()}
 
+      {idleQueue.length > 0 && !state.pendingEvent && dockQueue.length === 0 && !state.bankrupt && (() => {
+        const items = idleQueue.filter((n) => state.ships.some((s) => s.id === n.shipId))
+        const close = () => setIdleQueue([])
+        const show = (n: IdleNotice) => {
+          const ship = state.ships.find((s) => s.id === n.shipId)
+          if (ship?.portId) setSelection({ kind: 'port', id: ship.portId })
+          close()
+        }
+        if (!items.length) {
+          setTimeout(close)
+          return null
+        }
+        return (
+          <div className="modal-back">
+            <div className="modal" role="alertdialog" aria-modal="true">
+              <h2>{items.length === 1 ? 'Laiva odottaa käskyjä' : `${items.length} laivaa odottaa käskyjä`}</h2>
+              <ul className="idle-list">
+                {items.map((n) => (
+                  <li key={n.shipId + n.reason}>
+                    <span>{idleText(state, n)}</span>
+                    <button onClick={() => show(n)}>Näytä</button>
+                  </li>
+                ))}
+              </ul>
+              <div className="event-options">
+                <button onClick={close}>Jatka</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {state.bankrupt && (
         <div className="modal-back">
           <div className="modal" role="alertdialog" aria-modal="true">
@@ -376,4 +408,13 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
       />
     </div>
   )
+}
+
+function idleText(state: GameState, n: IdleNotice): string {
+  const ship = state.ships.find((s) => s.id === n.shipId)
+  if (!ship?.portId) return ''
+  const port = getPort(ship.portId).name
+  return n.reason === 'arrived'
+    ? `${ship.name} saapui satamaan ${port} ja odottaa uutta rahtia.`
+    : `${ship.name} on korjattu satamassa ${port} ja on valmis lähtöön.`
 }

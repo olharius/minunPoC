@@ -265,3 +265,17 @@ button:disabled { opacity: 0.5; cursor: default; }
 .dock-controls button { font-size: 1.3rem; padding: 0.6rem 0; touch-action: none; }
 .dock-controls .skip { grid-column: 1 / -1; font-size: 0.85rem; }
 .dock-result { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; text-align: center; }
+
+.idle-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.idle-list li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
