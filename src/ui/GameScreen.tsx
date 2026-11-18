@@ -285,7 +285,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
               const funded = loan > 0 ? borrow(state, loan) : state
               return p.listingId ? buyUsedShip(funded, p.listingId, name) : buyNewShip(funded, p.portId, p.typeId, name)
             })
-            flash(`${name} liittyi laivastoon!`)
+            flash(`${name.trim()} liittyi laivastoon!`)
           }}
         />
       )}
