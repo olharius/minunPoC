@@ -9,6 +9,7 @@ import { resolveEvent, rollSeaEvents } from './events'
 import { finishRepairs, MONTH } from './fleet'
 import { monthNews } from './news'
 import type { Contract, GameState, LogEntry, OwnedShip } from './types'
+import { sailingTime } from './voyage'
 
 // All game rules that change state live here. Each function returns a new
 // state (the old one is never mutated), so React re-renders and autosave work.
@@ -104,7 +105,7 @@ export function advanceDay(state: GameState): GameState {
     if (ship.dockUntil !== null) running -= t.dailyCost / 2 // crew partly ashore while in dock
     if (!ship.voyage) continue
     // Burn only for the part of the day actually spent sailing.
-    const sailed = Math.min(1, ship.voyage.arriveDay - (s.day - 1))
+    const sailed = sailingTime(ship.voyage, s.day - 1, s.day)
     ship.fuel = Math.max(0, Math.round((ship.fuel - effectiveFuelPerDay(t, ship.condition) * sailed) * 10) / 10)
     ship.condition = Math.max(0, Math.round((ship.condition - WEAR_PER_DAY) * 100) / 100)
     if (s.day >= ship.voyage.arriveDay) arrive(s, ship)

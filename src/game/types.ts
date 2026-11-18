@@ -29,6 +29,20 @@ export interface Voyage {
   payFactor?: number
   /** Kinds of decision events already met on this voyage (each at most once). */
   events?: string[]
+  /**
+   * Where the ship was when an event last changed its pace: share of the route
+   * `t` sailed on `day`. Missing = the departure (older saves).
+   */
+  anchor?: { day: number; t: number }
+  /** Times the ship stood still at sea (repairs, pirates). */
+  holds?: VoyageHold[]
+}
+
+/** The ship stays where it is from `from` until `until` (days). */
+export interface VoyageHold {
+  from: number
+  until: number
+  reason: 'repair' | 'service' | 'pirates'
 }
 
 export interface EventOption {

@@ -5,6 +5,7 @@ import { latePenalty, penaltyPerDay } from '../../game/economy'
 import { getCargo } from '../../game/market'
 import { currentDate } from '../../game/newGame'
 import type { GameState } from '../../game/types'
+import { activeHold, holdText, voyageProgress } from '../../game/voyage'
 
 interface Props {
   state: GameState
@@ -20,7 +21,8 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props)
   const t = getShipType(ship.typeId)
   const v = ship.voyage
   const dateOf = (day: number) => fmtDate(currentDate({ ...state, day }))
-  const progress = v ? Math.min(1, Math.max(0, (time - v.departDay) / (v.arriveDay - v.departDay))) : 0
+  const progress = v ? voyageProgress(v, time) : 0
+  const hold = v ? activeHold(v, time) : null
 
   return (
     <div>
@@ -44,6 +46,7 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props)
               {getPort(v.to).name}
             </button>
           </div>
+          {hold && <div className="hold-note">{hold.reason === 'pirates' ? '☠' : '🔧'} {holdText(hold, time)}</div>}
           <div className="progress">
             <div style={{ width: `${progress * 100}%` }} />
           </div>
