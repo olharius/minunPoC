@@ -1,9 +1,8 @@
 import { getPort } from '../../data/ports'
 import { getShipType } from '../../data/shipTypes'
-import { fmtDate, fmtMoney, fmtNum } from '../../game/format'
+import { fmtDay, fmtMoney, fmtNum } from '../../game/format'
 import { latePenalty, penaltyPerDay } from '../../game/economy'
 import { getCargo } from '../../game/market'
-import { currentDate } from '../../game/newGame'
 import type { GameState } from '../../game/types'
 import { activeHold, holdText, voyageProgress } from '../../game/voyage'
 
@@ -20,7 +19,7 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props)
   if (!ship) return null
   const t = getShipType(ship.typeId)
   const v = ship.voyage
-  const dateOf = (day: number) => fmtDate(currentDate({ ...state, day }))
+  const dateOf = (day: number) => fmtDay(state, day)
   const progress = v ? voyageProgress(v, time) : 0
   const hold = v ? activeHold(v, time) : null
 

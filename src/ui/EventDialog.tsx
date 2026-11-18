@@ -1,9 +1,8 @@
 import { getPort } from '../data/ports'
 import { penaltyPerDay } from '../game/economy'
 import { eventOutlook, type Outcome } from '../game/events'
-import { fmtDate, fmtMoney, fmtNum } from '../game/format'
+import { fmtDay, fmtMoney, fmtNum } from '../game/format'
 import { getCargo } from '../game/market'
-import { currentDate } from '../game/newGame'
 import type { GameState } from '../game/types'
 
 interface Props {
@@ -15,7 +14,7 @@ interface Props {
 export function EventDialog({ state, onChoose }: Props) {
   const ev = state.pendingEvent!
   const look = eventOutlook(state)
-  const dateOf = (day: number) => fmtDate(currentDate({ ...state, day }))
+  const dateOf = (day: number) => fmtDay(state, day)
   const v = look?.ship.voyage
   const c = v?.contract
 

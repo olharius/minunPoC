@@ -4,7 +4,8 @@ import { latePenalty, sizeFactor } from './economy'
 import { shipValue } from './fleet'
 import { fmtMoney } from './format'
 import { hashString, rng } from './rng'
-import type { GameState, LogEntry, OwnedShip } from './types'
+import { addLog as log, clone } from './state'
+import type { GameState, OwnedShip } from './types'
 import { activeHold, holdShip, shiftArrival as shiftArrivalOf, voyageProgress } from './voyage'
 
 // Events at sea. Each day every ship at sea rolls for an incident. Decision
@@ -31,10 +32,6 @@ export const PIRATE_ZONES: { name: string; box: [number, number, number, number]
   { name: 'Malakan salmi', box: [95, 0, 104, 7] },
   { name: 'Guineanlahti', box: [-5, -2, 10, 7] },
 ]
-
-function log(s: GameState, e: Omit<LogEntry, 'day'>) {
-  s.log = [{ day: s.day, ...e }, ...s.log].slice(0, 80)
-}
 
 /** Where the ship is now, [lon, lat]. */
 export function shipPosition(ship: OwnedShip, day: number): [number, number] {
@@ -125,7 +122,7 @@ export function rollSeaEvents(s: GameState) {
 export function resolveEvent(state: GameState, optionId: string): GameState {
   const ev = state.pendingEvent
   if (!ev) return state
-  const s = structuredClone(state)
+  const s = clone(state)
   s.pendingEvent = null
   const ship = s.ships.find((x) => x.id === ev.shipId)
   if (!ship?.voyage) return s

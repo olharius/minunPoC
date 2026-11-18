@@ -1,6 +1,6 @@
 import { CARGO_TYPES } from '../data/cargoTypes'
-import { getPort, PORTS } from '../data/ports'
-import { MONTH } from './fleet'
+import { PORTS } from '../data/ports'
+import { monthOf } from './calendar'
 import { hashString, rng } from './rng'
 import type { GameState } from './types'
 
@@ -24,10 +24,26 @@ const BOOM_TEXT: Record<string, string> = {
   paper: 'Painotalojen kysyntä kasvaa: paperirahdit nousevat.',
 }
 
-export function monthNews(state: Pick<GameState, 'seed'>, month: number): News[] {
+// The headlines are asked for many times a day (every freight offer and
+// harbour fee checks them), so each month's list is worked out only once.
+const newsCache = new Map<string, readonly News[]>()
+const NEWS_CACHE_SIZE = 24
+
+export function monthNews(state: Pick<GameState, 'seed'>, month: number): readonly News[] {
   // Calm first month, so a new player meets a normal market.
   if (month <= 0) return []
-  const r = rng(hashString(`${state.seed}:news:${month}`))
+  const key = `${state.seed}:${month}`
+  let news = newsCache.get(key)
+  if (!news) {
+    news = rollNews(state.seed, month)
+    if (newsCache.size >= NEWS_CACHE_SIZE) newsCache.delete(newsCache.keys().next().value!)
+    newsCache.set(key, news)
+  }
+  return news
+}
+
+function rollNews(seed: number, month: number): readonly News[] {
+  const r = rng(hashString(`${seed}:news:${month}`))
   const out: News[] = []
   const count = r.next() < 0.5 ? 1 : 2
   const used = new Set<string>()
@@ -46,11 +62,11 @@ export function monthNews(state: Pick<GameState, 'seed'>, month: number): News[]
       out.push({ kind: 'strike', portId: p.id, text: `Satamatyöläiset lakossa: ${p.name}. Ei uusia rahteja, ja satamamaksut ovat kaksinkertaiset.` })
     }
   }
-  return out
+  return Object.freeze(out.map((n) => Object.freeze(n)))
 }
 
-export function currentNews(state: Pick<GameState, 'seed' | 'day'>): News[] {
-  return monthNews(state, Math.floor(state.day / MONTH))
+export function currentNews(state: Pick<GameState, 'seed' | 'day'>): readonly News[] {
+  return monthNews(state, monthOf(state.day))
 }
 
 /** Multiplier for freight pay of a cargo this month. */
@@ -60,8 +76,4 @@ export function cargoFactor(state: Pick<GameState, 'seed' | 'day'>, cargoId: str
 
 export function portOnStrike(state: Pick<GameState, 'seed' | 'day'>, portId: string): boolean {
   return currentNews(state).some((n) => n.kind === 'strike' && n.portId === portId)
-}
-
-export function strikeName(portId: string) {
-  return getPort(portId).name
 }

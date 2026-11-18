@@ -38,8 +38,14 @@ export function newGame(companyName: string, homePortId: string, shipName: strin
   }
 }
 
-export function currentDate(state: GameState): Date {
+/** Calendar date of the current game day. */
+export function currentDate(state: Pick<GameState, 'startDate' | 'day'>): Date {
   const d = new Date(state.startDate + 'T00:00:00Z')
   d.setUTCDate(d.getUTCDate() + state.day)
   return d
+}
+
+/** Calendar date of any game day. */
+export function dateOfDay(state: Pick<GameState, 'startDate'>, day: number): Date {
+  return currentDate({ startDate: state.startDate, day })
 }

@@ -1,8 +1,9 @@
 import { CARGO_TYPES, type CargoType } from '../data/cargoTypes'
-import { PORTS } from '../data/ports'
+import { getPort, PORTS } from '../data/ports'
 import { getRoute } from '../data/routes'
 import type { CargoClass, ShipType } from '../data/shipTypes'
-import { inRange, MARKET_WEEK, penaltyPerDay } from './economy'
+import { MARKET_WEEK, monthOf } from './calendar'
+import { inRange, penaltyPerDay } from './economy'
 import { cargoFactor, portOnStrike } from './news'
 import { hashString, rng } from './rng'
 import type { Contract, GameState, OwnedShip } from './types'
@@ -33,8 +34,10 @@ export function canLoad(ship: ShipType, cargo: CargoType): boolean {
   return LOADS[ship.cargoClass].includes(cargo.cargoClass)
 }
 
+const cargoById = new Map(CARGO_TYPES.map((c) => [c.id, c]))
+
 export function getCargo(id: string): CargoType {
-  const c = CARGO_TYPES.find((c) => c.id === id)
+  const c = cargoById.get(id)
   if (!c) throw new Error(`Tuntematon lasti: ${id}`)
   return c
 }
@@ -56,8 +59,35 @@ export function freightPay(cargo: CargoType, tonnes: number, nm: number, factor 
 
 /** The offers on the board at a port this week, minus ones already taken. */
 export function portOffers(state: GameState, portId: string): Contract[] {
+  if (portOnStrike(state, portId)) return []
+  const taken = new Set(state.takenOffers)
+  // Copies, so nothing outside can change the cached board.
+  return weekBoard(state, portId)
+    .filter((o) => !taken.has(o.id))
+    .map((o) => ({ ...o }))
+}
+
+// The board is drawn from the seed, so the same week always gives the same
+// offers. The screen asks for it on every animation frame while the clock
+// runs, so each board is drawn once and remembered. Offers also depend on
+// the month's news, hence the month in the key.
+const boardCache = new Map<string, readonly Contract[]>()
+const BOARD_CACHE_SIZE = 64
+
+function weekBoard(state: Pick<GameState, 'seed' | 'day'>, portId: string): readonly Contract[] {
+  const key = `${state.seed}:${portId}:${marketWeek(state.day)}:${monthOf(state.day)}`
+  let board = boardCache.get(key)
+  if (!board) {
+    board = drawBoard(state, portId)
+    if (boardCache.size >= BOARD_CACHE_SIZE) boardCache.delete(boardCache.keys().next().value!)
+    boardCache.set(key, board)
+  }
+  return board
+}
+
+function drawBoard(state: Pick<GameState, 'seed' | 'day'>, portId: string): readonly Contract[] {
   const week = marketWeek(state.day)
-  const port = PORTS.find((p) => p.id === portId)!
+  const port = getPort(portId)
   const r = rng(hashString(`${state.seed}:market:${portId}:${week}`))
   const count = 3 + port.size * 3
   const startDay = week * MARKET_WEEK
@@ -88,9 +118,7 @@ export function portOffers(state: GameState, portId: string): Contract[] {
     c.penaltyPerDay = penaltyPerDay(c)
     offers.push(c)
   }
-  const taken = new Set(state.takenOffers)
-  if (portOnStrike(state, portId)) return []
-  return offers.filter((o) => !taken.has(o.id)).sort((a, b) => b.pay - a.pay)
+  return offers.sort((a, b) => b.pay - a.pay)
 }
 
 export function offerFits(ship: OwnedShip, t: ShipType, o: Contract): string | null {

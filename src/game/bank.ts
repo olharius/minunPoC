@@ -1,6 +1,8 @@
-import { fleetValue, MONTH } from './fleet'
+import { MONTH } from './calendar'
+import { fleetValue } from './fleet'
 import { fmtMoney } from './format'
-import type { GameState, LogEntry } from './types'
+import { addLog as log, clone } from './state'
+import type { GameState } from './types'
 
 // The bank: one running loan, interest monthly, credit secured on the fleet.
 
@@ -20,15 +22,11 @@ export function monthlyInterest(state: GameState): number {
   return Math.round((state.loan * LOAN_RATE) / 12)
 }
 
-function log(s: GameState, e: Omit<LogEntry, 'day'>) {
-  s.log = [{ day: s.day, ...e }, ...s.log].slice(0, 80)
-}
-
 export function borrow(state: GameState, amount: number): GameState {
   const a = Math.round(amount)
   if (a <= 0) return state
   if (a > creditAvailable(state)) throw new Error(`Pankki lainaa enintään ${fmtMoney(creditAvailable(state))}.`)
-  const s = structuredClone(state)
+  const s = clone(state)
   s.loan += a
   s.money += a
   log(s, { kind: 'bank', text: 'Otettiin lainaa.', amount: a })
@@ -38,7 +36,7 @@ export function borrow(state: GameState, amount: number): GameState {
 export function repay(state: GameState, amount: number): GameState {
   const a = Math.round(Math.min(amount, state.loan, state.money))
   if (a <= 0) return state
-  const s = structuredClone(state)
+  const s = clone(state)
   s.loan -= a
   s.money -= a
   log(s, { kind: 'bank', text: 'Lyhennettiin lainaa.', amount: -a })

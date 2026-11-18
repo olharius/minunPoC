@@ -6,31 +6,18 @@ import { fmtMoney, fmtNum } from './format'
 import { getCargo, marketWeek, offerFits, portOffers } from './market'
 import { monthEnd } from './bank'
 import { resolveEvent, rollSeaEvents } from './events'
-import { finishRepairs, MONTH } from './fleet'
+import { MONTH } from './calendar'
+import { finishRepairs } from './fleet'
 import { monthNews } from './news'
-import type { Contract, GameState, LogEntry, OwnedShip } from './types'
+import { addLog as log, clone, getShip as shipOf } from './state'
+import type { Contract, GameState, OwnedShip } from './types'
 import { sailingTime } from './voyage'
 
 // All game rules that change state live here. Each function returns a new
 // state (the old one is never mutated), so React re-renders and autosave work.
 
-const LOG_LIMIT = 80
 /** Wear per day at sea, condition points. */
 const WEAR_PER_DAY = 0.08
-
-function clone(state: GameState): GameState {
-  return structuredClone(state)
-}
-
-function log(s: GameState, e: Omit<LogEntry, 'day'>) {
-  s.log = [{ day: s.day, ...e }, ...s.log].slice(0, LOG_LIMIT)
-}
-
-function shipOf(s: GameState, id: string): OwnedShip {
-  const ship = s.ships.find((x) => x.id === id)
-  if (!ship) throw new Error('Tuntematon laiva.')
-  return ship
-}
 
 /** Fill the tank at the current port. */
 export function refuel(state: GameState, shipId: string, tonnes?: number): GameState {
@@ -39,8 +26,8 @@ export function refuel(state: GameState, shipId: string, tonnes?: number): GameS
   if (!ship.portId) throw new Error('Laiva on merellä.')
   const t = getShipType(ship.typeId)
   const amount = Math.max(0, Math.min(tonnes ?? Infinity, t.fuelCapacity - ship.fuel))
-  const cost = Math.round(amount * fuelPrice(s, ship.portId))
   if (amount <= 0) return state
+  const cost = Math.round(amount * fuelPrice(s, ship.portId))
   ship.fuel += amount
   s.money -= cost
   s.ledger.fuel += cost
@@ -51,8 +38,9 @@ export function refuel(state: GameState, shipId: string, tonnes?: number): GameS
 /** Send a ship to `to`, optionally carrying a contract. Buys missing fuel automatically. */
 export function depart(state: GameState, shipId: string, to: string, contract: Contract | null = null): GameState {
   const plan = planVoyage(state, shipId, to)
-  const t = getShipType(shipOf(state, shipId).typeId)
-  if (shipOf(state, shipId).dockUntil !== null) throw new Error('Laiva on telakalla.')
+  const before = shipOf(state, shipId)
+  const t = getShipType(before.typeId)
+  if (before.dockUntil !== null) throw new Error('Laiva on telakalla.')
   if (plan.fuelNeeded > t.fuelCapacity) throw new Error('Matka on liian pitkä yhdellä tankillisella.')
   let s = state
   if (plan.fuelToBuy > 0) s = refuel(s, shipId, plan.fuelToBuy)
@@ -91,8 +79,8 @@ export function acceptOffer(state: GameState, shipId: string, offerId: string): 
 
 /** Advance the clock one day: costs, fuel, wear, arrivals. */
 export function advanceDay(state: GameState): GameState {
+  if (state.bankrupt) return state
   const s = clone(state)
-  if (s.bankrupt) return state
   const prevWeek = marketWeek(s.day)
   s.day += 1
   if (marketWeek(s.day) !== prevWeek) s.takenOffers = []

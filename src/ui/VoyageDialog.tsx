@@ -1,9 +1,8 @@
 import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
 import { latePenalty, penaltyPerDay, planVoyage, voyageFuelValue } from '../game/economy'
-import { fmtCost, fmtDate, fmtMoney, fmtNum } from '../game/format'
+import { fmtCost, fmtDay, fmtMoney, fmtNum } from '../game/format'
 import { getCargo } from '../game/market'
-import { currentDate } from '../game/newGame'
 import type { Contract, GameState } from '../game/types'
 
 interface Props {
@@ -20,7 +19,7 @@ export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel 
   const plan = planVoyage(state, shipId, to)
   const burned = voyageFuelValue(state, shipId, to)
   const arrivalDay = state.day + plan.arriveInDays
-  const dateOf = (day: number) => fmtDate(currentDate({ ...state, day }))
+  const dateOf = (day: number) => fmtDay(state, day)
   const late = contract ? arrivalDay - contract.deadlineDay : 0
   const revenue = contract ? contract.pay : 0
   const penalty = contract ? latePenalty(contract, late) : 0

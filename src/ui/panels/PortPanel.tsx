@@ -4,9 +4,8 @@ import { getRoute } from '../../data/routes'
 import { getShipType } from '../../data/shipTypes'
 import { fuelPrice, harbourFee, inRange, penaltyPerDay } from '../../game/economy'
 import { canRepairAt, repairQuote, sellsNewShips, shipValue, usedListings } from '../../game/fleet'
-import { fmtDate, fmtMoney, fmtNum } from '../../game/format'
+import { fmtDay, fmtMoney, fmtNum } from '../../game/format'
 import { getCargo, nextMarketDay, offerFits, portOffers } from '../../game/market'
-import { currentDate } from '../../game/newGame'
 import type { Contract, GameState } from '../../game/types'
 import { portOnStrike } from '../../game/news'
 import { ShipyardTab } from './ShipyardTab'
@@ -96,7 +95,7 @@ export function PortPanel(props: Props) {
             <span>Arvo {fmtMoney(shipValue(ship))}</span>
           </div>
           {ship.dockUntil !== null ? (
-            <div className="status docked">Telakalla, valmis {fmtDate(currentDate({ ...state, day: ship.dockUntil }))}</div>
+            <div className="status docked">Telakalla, valmis {fmtDay(state, ship.dockUntil)}</div>
           ) : (
             <div className="btn-row">
               <button className="small" disabled={ship.fuel >= t.fuelCapacity} onClick={() => props.onRefuel(ship.id)}>
@@ -136,7 +135,7 @@ export function PortPanel(props: Props) {
 function FreightTab({ state, portId, ship, onChooseOffer, onChooseEmpty, onPreview }: Props & { ship: GameState['ships'][number] | null }) {
   const t = ship ? getShipType(ship.typeId) : null
   const [emptyTo, setEmptyTo] = useState('')
-  const dateOf = (day: number) => fmtDate(currentDate({ ...state, day }))
+  const dateOf = (day: number) => fmtDay(state, day)
   // Offers this ship can take first, then the rest; each group by pay.
   const offers = portOffers(state, portId)
     .map((o) => ({ o, why: ship && t ? offerFits(ship, t, o) : 'Ei laivaa' }))
