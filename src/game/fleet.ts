@@ -1,13 +1,15 @@
 import { getPort, PORTS } from '../data/ports'
 import { getShipType, SHIP_TYPES, type ShipType } from '../data/shipTypes'
+import { monthOf } from './calendar'
 import { fmtMoney } from './format'
 import { fleetNameKeys, isNameTaken, nameKey, uniqueName } from './names'
 import { hashString, rng } from './rng'
-import type { GameState, LogEntry, OwnedShip } from './types'
+import { addLog as log, clone, getShip } from './state'
+import type { GameState, OwnedShip } from './types'
 
 // Buying, selling and repairing ships.
 
-export const MONTH = 30
+export { MONTH } from './calendar'
 /** New ships are sold at the big hubs; repairs need at least a medium port. */
 export const NEWBUILD_PORT_SIZE = 3
 export const REPAIR_PORT_SIZE = 2
@@ -53,7 +55,7 @@ const USED_NAMES = [
 export function usedListings(state: GameState, portId: string): Listing[] {
   const p = getPort(portId)
   if (p.size < 2) return []
-  const month = Math.floor(state.day / MONTH)
+  const month = monthOf(state.day)
   const r = rng(hashString(`${state.seed}:used:${portId}:${month}`))
   const out: Listing[] = []
   // Suggested names never clash with the fleet or with each other.
@@ -81,14 +83,6 @@ export function canRepairAt(portId: string): boolean {
 export const SHIPYARD_PORTS = PORTS.filter((p) => p.size >= NEWBUILD_PORT_SIZE).map((p) => p.id)
 
 // ---- actions ----
-
-function clone(state: GameState): GameState {
-  return structuredClone(state)
-}
-
-function log(s: GameState, e: Omit<LogEntry, 'day'>) {
-  s.log = [{ day: s.day, ...e }, ...s.log].slice(0, 80)
-}
 
 /** Throws a Finnish error if the name is empty or already used in the fleet. */
 export function checkShipName(state: GameState, name: string, exceptShipId?: string) {
@@ -146,8 +140,7 @@ export function buyUsedShip(state: GameState, listingId: string, name: string): 
 
 export function sellShip(state: GameState, shipId: string): GameState {
   const s = clone(state)
-  const ship = s.ships.find((x) => x.id === shipId)
-  if (!ship) throw new Error('Tuntematon laiva.')
+  const ship = getShip(s, shipId)
   if (!ship.portId) throw new Error('Laiva on merellä.')
   if (ship.dockUntil !== null) throw new Error('Laiva on telakalla.')
   if (s.ships.length === 1) throw new Error('Et voi myydä viimeistä laivaasi.')
