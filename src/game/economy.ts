@@ -3,7 +3,7 @@ import { getPort } from '../data/ports'
 import { getRoute } from '../data/routes'
 import { getShipType, type ShipType } from '../data/shipTypes'
 import { hashString, rng } from './rng'
-import type { GameState } from './types'
+import type { GameState, OwnedShip } from './types'
 
 /** Market and price cycles, in days. */
 export const MARKET_WEEK = 7
@@ -36,18 +36,34 @@ export function fuelPrice(state: Pick<GameState, 'seed' | 'day'>, portId: string
   return Math.round(base * swing * local)
 }
 
-export function sailingDays(nm: number, t: ShipType): number {
-  return nm / (t.speed * SPEED_FACTOR * 24)
+/** A worn hull is slower: at 0 % condition the ship makes 80 % of its speed. */
+export function effectiveSpeed(t: ShipType, condition = 100): number {
+  return t.speed * (0.8 + 0.2 * (condition / 100))
+}
+
+/** A worn engine burns more: up to +40 % at 0 % condition. */
+export function effectiveFuelPerDay(t: ShipType, condition = 100): number {
+  return t.fuelPerDay * (1 + 0.4 * (1 - condition / 100))
+}
+
+export function sailingDays(nm: number, t: ShipType, condition = 100): number {
+  return nm / (effectiveSpeed(t, condition) * SPEED_FACTOR * 24)
 }
 
 /** Fuel for a voyage including a 10 % reserve, as any sensible captain keeps. */
-export function fuelForVoyage(nm: number, t: ShipType): number {
-  return Math.ceil(sailingDays(nm, t) * t.fuelPerDay * 1.1)
+export function fuelForVoyage(nm: number, t: ShipType, condition = 100): number {
+  return Math.ceil(sailingDays(nm, t, condition) * effectiveFuelPerDay(t, condition) * 1.1)
 }
 
 /** Can the ship make the trip on one tank? */
-export function inRange(t: ShipType, nm: number): boolean {
-  return fuelForVoyage(nm, t) <= t.fuelCapacity
+export function inRange(t: ShipType, nm: number, condition = 100): boolean {
+  return fuelForVoyage(nm, t, condition) <= t.fuelCapacity
+}
+
+export function shipFor(state: GameState, id: string): OwnedShip {
+  const s = state.ships.find((x) => x.id === id)
+  if (!s) throw new Error('Tuntematon laiva.')
+  return s
 }
 
 export interface VoyagePlan {
@@ -74,9 +90,9 @@ export function planVoyage(state: GameState, shipId: string, to: string): Voyage
   if (!ship?.portId) throw new Error('Laiva ei ole satamassa.')
   const t = getShipType(ship.typeId)
   const route = getRoute(ship.portId, to)
-  const days = sailingDays(route.nm, t)
+  const days = sailingDays(route.nm, t, ship.condition)
   const arriveInDays = Math.max(1, Math.ceil(days))
-  const fuelNeeded = fuelForVoyage(route.nm, t)
+  const fuelNeeded = fuelForVoyage(route.nm, t, ship.condition)
   const fuelToBuy = Math.max(0, fuelNeeded - ship.fuel)
   const fuelCost = Math.round(fuelToBuy * fuelPrice(state, ship.portId))
   const runningCost = Math.round(arriveInDays * t.dailyCost)
@@ -103,7 +119,8 @@ export function planVoyage(state: GameState, shipId: string, to: string): Voyage
 export function voyageFuelValue(state: GameState, shipId: string, to: string): number {
   const ship = state.ships.find((s) => s.id === shipId)!
   const t = getShipType(ship.typeId)
-  return Math.round(sailingDays(getRoute(ship.portId!, to).nm, t) * t.fuelPerDay * fuelPrice(state, ship.portId!))
+  const days = sailingDays(getRoute(ship.portId!, to).nm, t, ship.condition)
+  return Math.round(days * effectiveFuelPerDay(t, ship.condition) * fuelPrice(state, ship.portId!))
 }
 
 /** Pay after a late delivery: −10 % per day late, at least 30 %. */
