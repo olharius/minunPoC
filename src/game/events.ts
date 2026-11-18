@@ -5,6 +5,7 @@ import { shipValue } from './fleet'
 import { fmtMoney } from './format'
 import { hashString, rng } from './rng'
 import type { GameState, LogEntry, OwnedShip } from './types'
+import { activeHold, holdShip, shiftArrival as shiftArrivalOf, voyageProgress } from './voyage'
 
 // Events at sea. Each day every ship at sea rolls for an incident. Decision
 // events stop the clock and wait for the player; small ones apply at once.
@@ -26,15 +27,10 @@ function log(s: GameState, e: Omit<LogEntry, 'day'>) {
   s.log = [{ day: s.day, ...e }, ...s.log].slice(0, 80)
 }
 
-function progress(ship: OwnedShip, day: number): number {
-  const v = ship.voyage!
-  return Math.min(1, Math.max(0, (day - v.departDay) / (v.arriveDay - v.departDay)))
-}
-
 /** Where the ship is now, [lon, lat]. */
 export function shipPosition(ship: OwnedShip, day: number): [number, number] {
   const v = ship.voyage!
-  return pointAlong(getRoute(v.from, v.to), progress(ship, day))
+  return pointAlong(getRoute(v.from, v.to), voyageProgress(v, day))
 }
 
 export function pirateZoneAt([lon, lat]: [number, number]): string | null {
@@ -42,16 +38,9 @@ export function pirateZoneAt([lon, lat]: [number, number]): string | null {
   return z?.name ?? null
 }
 
-/**
- * Change a voyage's arrival by `days` (negative = earlier) while keeping the
- * ship where it is on the map.
- */
+/** Change a voyage's arrival by `days`, keeping the ship moving (see voyage.ts). */
 export function shiftArrival(ship: OwnedShip, day: number, days: number) {
-  const v = ship.voyage!
-  const t = progress(ship, day)
-  const arrive = Math.max(day + 0.5, v.arriveDay + days)
-  v.arriveDay = arrive
-  if (t > 0 && t < 1) v.departDay = (day - t * arrive) / (1 - t)
+  shiftArrivalOf(ship.voyage!, day, days)
 }
 
 function costFor(ship: OwnedShip, base: number) {
@@ -65,6 +54,8 @@ export function rollSeaEvents(s: GameState) {
     if (!v || s.pendingEvent) continue
     // Nothing on the final stretch into port.
     if (v.arriveDay - s.day < 1) continue
+    // A ship standing still (repairs, pirates) has nothing new happen to it.
+    if (activeHold(v, s.day)) continue
     const r = rng(hashString(`${s.seed}:sea:${ship.id}:${s.day}`))
     const seen = new Set(v.events ?? [])
     const zone = pirateZoneAt(shipPosition(ship, s.day))
@@ -154,19 +145,19 @@ export function resolveEvent(state: GameState, optionId: string): GameState {
     }
   } else if (ev.kind === 'engine') {
     if (optionId === 'service') {
-      shiftArrival(ship, s.day, 1)
-      spend(costFor(ship, 30000), `${ship.name}: huoltoalus korjasi koneen.`)
+      holdShip(v, s.day, 1, 'service')
+      spend(costFor(ship, 30000), `${ship.name}: huoltoalus korjaa koneen. Laiva seisoo paikallaan päivän.`)
     } else {
-      shiftArrival(ship, s.day, 3)
+      holdShip(v, s.day, 3, 'repair')
       ship.condition = Math.max(0, ship.condition - 2)
-      log(s, { kind: 'event', text: `${ship.name}: kone korjattiin omin voimin kolmessa päivässä.` })
+      log(s, { kind: 'event', text: `${ship.name}: miehistö korjaa konetta omin voimin. Laiva seisoo paikallaan kolme päivää (kunto −2 %).` })
     }
   } else if (ev.kind === 'pirates') {
     if (optionId === 'guards') {
       spend(costFor(ship, 40000), `${ship.name} palkkasi vartijat ja ylitti riskialueen turvallisesti.`)
     } else if (r.next() < 0.25) {
       const ransom = Math.round((shipValue(ship) * 0.05) / 1000) * 1000
-      shiftArrival(ship, s.day, 4)
+      holdShip(v, s.day, 4, 'pirates')
       spend(ransom, `Merirosvot kaappasivat laivan ${ship.name}! Lunnaat maksettiin, ja matka viivästyy neljä päivää.`)
     } else {
       log(s, { kind: 'event', text: `${ship.name} ylitti riskialueen ilman välikohtauksia.` })

@@ -4,6 +4,7 @@ import { fmtDate, fmtNum } from '../../game/format'
 import { getCargo } from '../../game/market'
 import { currentDate } from '../../game/newGame'
 import type { GameState, OwnedShip } from '../../game/types'
+import { activeHold, holdText } from '../../game/voyage'
 
 interface Props {
   state: GameState
@@ -14,6 +15,8 @@ function statusOf(state: GameState, s: OwnedShip): { text: string; cls: string }
   const dateOf = (day: number) => fmtDate(currentDate({ ...state, day }))
   if (s.voyage) {
     const cargo = s.voyage.contract ? `${fmtNum(s.voyage.contract.tonnes)} t ${getCargo(s.voyage.contract.cargoId).name.toLowerCase()}` : 'ei lastia'
+    const hold = activeHold(s.voyage, state.day)
+    if (hold) return { text: `${holdText(hold, state.day)} · → ${getPort(s.voyage.to).name}, perillä ${dateOf(Math.ceil(s.voyage.arriveDay))}`, cls: 'at-sea held' }
     return { text: `→ ${getPort(s.voyage.to).name}, perillä ${dateOf(Math.ceil(s.voyage.arriveDay))} · ${cargo}`, cls: 'at-sea' }
   }
   if (s.dockUntil !== null) return { text: `Telakalla: ${getPort(s.portId!).name}, valmis ${dateOf(s.dockUntil)}`, cls: 'docked' }

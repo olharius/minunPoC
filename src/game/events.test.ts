@@ -5,10 +5,24 @@ import { portOffers } from './market'
 import { newGame } from './newGame'
 import { cargoFactor, monthNews, portOnStrike } from './news'
 import { parseSave } from './save'
+import { activeHold, voyageProgress } from './voyage'
 import { advanceDay, applyDocking, depart } from './sim'
 import type { GameState } from './types'
 
 const sailing = (seed = 3): GameState => depart({ ...newGame('T', 'rotterdam', 'A'), seed }, 's1', 'singapore')
+
+const OPTS = { engine: ['self', 'service'], pirates: ['guards', 'risk'], storm: ['around', 'through'] }
+function withEvent(s: GameState, kind: 'engine' | 'pirates' | 'storm'): GameState {
+  return {
+    ...s,
+    pendingEvent: { kind, shipId: s.ships[0].id, day: s.day, title: '', text: '', options: OPTS[kind].map((id) => ({ id, label: id, detail: '' })) },
+  }
+}
+/** A day without new events, so a test sees only the effect it set up. */
+function calmDay(s: GameState): GameState {
+  const v = s.ships[0].voyage!
+  return advanceDay({ ...s, ships: [{ ...s.ships[0], voyage: { ...v, events: ['storm', 'engine', 'pirates'] } }, ...s.ships.slice(1)] })
+}
 
 function untilEvent(s: GameState, max = 60): GameState {
   for (let i = 0; i < max && !s.pendingEvent; i++) s = advanceDay(s)
@@ -39,6 +53,61 @@ describe('events at sea', () => {
       return
     }
     throw new Error('no storm found')
+  })
+
+  it('engine repairs stop the ship for the given days, then it sails on', () => {
+    for (const [option, days] of [
+      ['self', 3],
+      ['service', 1],
+    ] as const) {
+      let s = sailing()
+      for (let i = 0; i < 5; i++) s = advanceDay({ ...s, pendingEvent: null })
+      s = withEvent(s, 'engine')
+      const departDay = s.ships[0].voyage!.departDay
+      const arrive = s.ships[0].voyage!.arriveDay
+      const pos = shipPosition(s.ships[0], s.day)
+      s = resolveEvent(s, option)
+      expect(s.ships[0].voyage!.arriveDay).toBeCloseTo(arrive + days)
+      expect(s.ships[0].voyage!.departDay).toBe(departDay)
+      for (let i = 0; i < days; i++) {
+        const fuel = s.ships[0].fuel
+        s = calmDay(s)
+        const p = shipPosition(s.ships[0], s.day)
+        // Standing still: no movement, no fuel burnt.
+        expect(p[0]).toBeCloseTo(pos[0], 3)
+        expect(p[1]).toBeCloseTo(pos[1], 3)
+        expect(s.ships[0].fuel).toBe(fuel)
+      }
+      s = calmDay(s)
+      const moved = shipPosition(s.ships[0], s.day)
+      expect(Math.abs(moved[0] - pos[0]) + Math.abs(moved[1] - pos[1])).toBeGreaterThan(0.1)
+    }
+  })
+
+  it('a ransom stops the ship for four days', () => {
+    let s = sailing()
+    for (let i = 0; i < 5; i++) s = advanceDay({ ...s, pendingEvent: null })
+    // Find a seed where the pirates strike.
+    for (let seed = 0; seed < 200; seed++) {
+      const t = resolveEvent(withEvent({ ...s, seed }, 'pirates'), 'risk')
+      const v = t.ships[0].voyage!
+      if (!v.holds?.length) continue
+      expect(v.holds[0]).toMatchObject({ from: t.day, until: t.day + 4, reason: 'pirates' })
+      expect(activeHold(v, t.day + 3.5)).not.toBeNull()
+      expect(activeHold(v, t.day + 4)).toBeNull()
+      expect(t.money).toBeLessThan(s.money)
+      return
+    }
+    throw new Error('pirates never struck')
+  })
+
+  it('progress keeps working for voyages from older saves', () => {
+    const s = sailing()
+    const v = s.ships[0].voyage!
+    expect(v.anchor).toBeUndefined()
+    expect(voyageProgress(v, v.departDay)).toBe(0)
+    expect(voyageProgress(v, (v.departDay + v.arriveDay) / 2)).toBeCloseTo(0.5)
+    expect(voyageProgress(v, v.arriveDay)).toBe(1)
   })
 
   it('knows the pirate zones', () => {

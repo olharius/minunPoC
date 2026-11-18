@@ -189,6 +189,8 @@ input, select {
 .sea-ship .bridge { fill: #fff; }
 .sea-ship .cargo { fill: var(--accent); }
 .sea-ship .cargo.empty { fill: #9aa; }
+.sea-ship .hold-badge rect { fill: #fff6dc; stroke: #b5651d; stroke-width: 1; }
+.sea-ship .hold-badge text { font-size: 9px; font-weight: 700; fill: #7a3d0c; pointer-events: none; }
 .sea-ship .wake { fill: none; stroke: rgba(255, 255, 255, 0.8); stroke-width: 0.8; }
 
 /* ---------- time controls ---------- */
@@ -205,6 +207,8 @@ input, select {
 .ship-card { width: 100%; text-align: left; background: transparent; border: none; padding: 0; }
 .status { font-size: 0.85rem; margin-top: 4px; }
 .status.at-sea { color: #1f5f8b; }
+.status.held { color: #b5651d; }
+.hold-note { background: #fff6dc; border: 1px solid #e3c27a; color: #7a3d0c; border-radius: 8px; padding: 6px 10px; margin: 8px 0 4px; font-weight: 600; }
 .status.in-port { color: #6b4f1d; }
 .ship-in-port { background: #fffaf0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
 .offers { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 8px; }
