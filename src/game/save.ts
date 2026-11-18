@@ -2,7 +2,7 @@ import type { GameState } from './types'
 
 // Save format. Bump SAVE_VERSION and add a step to `migrate` whenever
 // GameState changes shape, so old saves keep loading.
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
 const STORAGE_KEY = 'minunpoc.autosave'
 
 export interface SaveFile {
@@ -52,6 +52,12 @@ function migrate(version: number, state: Record<string, unknown>): GameState {
     s.loan = 0
     s.takenListings = []
     s.bankrupt = false
+  }
+  if (version < 4) {
+    // v4: events at sea and settings.
+    s.ledger = { ...(s.ledger as object), incidents: 0 }
+    s.pendingEvent = null
+    s.settings = { manualDocking: false, autoEvents: false }
   }
   return s as unknown as GameState
 }

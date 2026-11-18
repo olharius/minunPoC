@@ -5,7 +5,9 @@ import { effectiveFuelPerDay, fuelPrice, harbourFee, latePay, planVoyage } from 
 import { fmtMoney, fmtNum } from './format'
 import { getCargo, marketWeek, offerFits, portOffers } from './market'
 import { monthEnd } from './bank'
+import { resolveEvent, rollSeaEvents } from './events'
 import { finishRepairs, MONTH } from './fleet'
+import { monthNews } from './news'
 import type { Contract, GameState, LogEntry, OwnedShip } from './types'
 
 // All game rules that change state live here. Each function returns a new
@@ -110,8 +112,16 @@ export function advanceDay(state: GameState): GameState {
   s.money -= running
   s.ledger.running += running
   finishRepairs(s)
+  rollSeaEvents(s)
+  // Captains decide on their own: the first option is always the safe one.
+  const out = s.pendingEvent && s.settings.autoEvents ? resolveEvent(s, s.pendingEvent.options[0].id) : s
+  return finishDay(out, state.money)
+}
 
-  if (state.money >= 0 && s.money < 0) {
+function finishDay(s: GameState, moneyBefore: number): GameState {
+  if (s.day % MONTH === 0) for (const n of monthNews(s, s.day / MONTH)) log(s, { kind: 'news', text: n.text })
+
+  if (moneyBefore >= 0 && s.money < 0) {
     log(s, { kind: 'warning', text: 'Kassa on miinuksella! Kuun lopussa pankki kattaa vajeen lainalla, jos luottoa on jäljellä.' })
   }
   monthEnd(s)
@@ -124,14 +134,14 @@ function arrive(s: GameState, ship: OwnedShip) {
   const port = getPort(v.to)
   ship.portId = v.to
   ship.voyage = null
-  const fee = harbourFee(port.id, t)
+  const fee = harbourFee(port.id, t, s)
   s.money -= fee
   s.ledger.harbour += fee
   log(s, { kind: 'arrival', text: `${ship.name} saapui satamaan ${port.name}. Satamamaksu.`, amount: -fee })
   const c = v.contract
   if (!c) return
   const late = s.day - c.deadlineDay
-  const pay = latePay(c.pay, late)
+  const pay = Math.round(latePay(c.pay, late) * (v.payFactor ?? 1))
   s.money += pay
   s.ledger.revenue += pay
   const cargo = getCargo(c.cargoId).name.toLowerCase()
@@ -145,4 +155,33 @@ function arrive(s: GameState, ship: OwnedShip) {
 /** Ships that docked between two states (for pausing / notifications). */
 export function arrivals(before: GameState, after: GameState): OwnedShip[] {
   return after.ships.filter((s) => s.portId && before.ships.find((b) => b.id === s.id)?.voyage)
+}
+
+export interface DockingResult {
+  /** Reached the berth before time ran out. */
+  success: boolean
+  /** Collisions with quays or breakwaters. */
+  hits: number
+}
+
+/** Outcome of steering a ship into port yourself: a saved pilot fee, or dents. */
+export function applyDocking(state: GameState, shipId: string, result: DockingResult): GameState {
+  const s = clone(state)
+  const ship = shipOf(s, shipId)
+  if (!ship.portId) return state
+  const t = getShipType(ship.typeId)
+  if (result.hits > 0) {
+    ship.condition = Math.max(0, ship.condition - 2 * result.hits)
+  }
+  if (result.success && result.hits === 0) {
+    const saved = Math.round(harbourFee(ship.portId, t, s) * 0.4)
+    s.money += saved
+    s.ledger.harbour -= saved
+    log(s, { kind: 'arrival', text: `${ship.name} ohjattiin laituriin ilman luotsia. Luotsimaksu säästyi.`, amount: saved })
+  } else if (result.success) {
+    log(s, { kind: 'arrival', text: `${ship.name} pääsi laituriin, mutta kolhi itseään (kunto −${2 * result.hits} %).` })
+  } else {
+    log(s, { kind: 'arrival', text: `${ship.name} ei päässyt laituriin ajoissa, joten luotsi ohjasi sen perille${result.hits ? ` (kunto −${2 * result.hits} %)` : ''}.` })
+  }
+  return s
 }

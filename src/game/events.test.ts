@@ -1,0 +1,116 @@
+import { describe, expect, it } from 'vitest'
+import { getRoute } from '../data/routes'
+import { pirateZoneAt, resolveEvent, shiftArrival, shipPosition } from './events'
+import { portOffers } from './market'
+import { newGame } from './newGame'
+import { cargoFactor, monthNews, portOnStrike } from './news'
+import { parseSave } from './save'
+import { advanceDay, applyDocking, depart } from './sim'
+import type { GameState } from './types'
+
+const sailing = (seed = 3): GameState => depart({ ...newGame('T', 'rotterdam', 'A'), seed }, 's1', 'singapore')
+
+function untilEvent(s: GameState, max = 60): GameState {
+  for (let i = 0; i < max && !s.pendingEvent; i++) s = advanceDay(s)
+  return s
+}
+
+describe('events at sea', () => {
+  it('eventually asks the player something on a long voyage', () => {
+    let found = 0
+    for (let seed = 0; seed < 20; seed++) if (untilEvent(sailing(seed)).pendingEvent) found++
+    expect(found).toBeGreaterThan(5)
+  })
+
+  it('a storm detour delays arrival but keeps the ship in place', () => {
+    for (let seed = 0; seed < 200; seed++) {
+      let s = untilEvent(sailing(seed))
+      if (s.pendingEvent?.kind !== 'storm') continue
+      const ship = s.ships[0]
+      const before = ship.voyage!.arriveDay
+      const pos = shipPosition(ship, s.day)
+      s = resolveEvent(s, 'around')
+      expect(s.pendingEvent).toBeNull()
+      expect(s.ships[0].voyage!.arriveDay).toBeCloseTo(before + 2)
+      const after = shipPosition(s.ships[0], s.day)
+      expect(after[0]).toBeCloseTo(pos[0], 3)
+      expect(after[1]).toBeCloseTo(pos[1], 3)
+      expect(s.ships[0].voyage!.events).toContain('storm')
+      return
+    }
+    throw new Error('no storm found')
+  })
+
+  it('knows the pirate zones', () => {
+    expect(pirateZoneAt([50, 12])).toBe('Adeninlahti')
+    expect(pirateZoneAt([0, 50])).toBeNull()
+    // The Suez route to Singapore passes the Gulf of Aden.
+    const path = getRoute('rotterdam', 'singapore').path
+    expect(path.some((p) => pirateZoneAt(p) === 'Adeninlahti')).toBe(true)
+  })
+
+  it('shiftArrival never lands in the past', () => {
+    const s = sailing()
+    shiftArrival(s.ships[0], s.day, -999)
+    expect(s.ships[0].voyage!.arriveDay).toBeGreaterThan(s.day)
+  })
+})
+
+describe('auto events', () => {
+  it('captains resolve events themselves when allowed', () => {
+    let s = sailing(1)
+    s = { ...s, settings: { ...s.settings, autoEvents: true } }
+    for (let i = 0; i < 60; i++) {
+      s = advanceDay(s)
+      expect(s.pendingEvent).toBeNull()
+    }
+  })
+})
+
+describe('news', () => {
+  it('is quiet in the first month and deterministic later', () => {
+    expect(monthNews({ seed: 1 }, 0)).toEqual([])
+    expect(monthNews({ seed: 1 }, 5)).toEqual(monthNews({ seed: 1 }, 5))
+    expect(monthNews({ seed: 1 }, 5).length).toBeGreaterThan(0)
+  })
+
+  it('moves freight rates and closes struck ports', () => {
+    for (let month = 1; month < 200; month++) {
+      const news = monthNews({ seed: 9 }, month)
+      const strike = news.find((n) => n.kind === 'strike')
+      if (!strike || strike.kind !== 'strike') continue
+      const s = { ...newGame('T', 'rotterdam', 'A'), seed: 9, day: month * 30 }
+      expect(portOnStrike(s, strike.portId)).toBe(true)
+      expect(portOffers(s, strike.portId)).toEqual([])
+      const boom = news.find((n) => n.kind === 'boom')
+      if (boom && boom.kind === 'boom') expect(cargoFactor(s, boom.cargoId)).toBeCloseTo(1.35)
+      return
+    }
+    throw new Error('no strike found')
+  })
+})
+
+describe('docking minigame', () => {
+  it('a clean docking refunds part of the harbour fee; hits dent the hull', () => {
+    const s = newGame('T', 'rotterdam', 'A')
+    const clean = applyDocking(s, 's1', { success: true, hits: 0 })
+    expect(clean.money).toBeGreaterThan(s.money)
+    const rough = applyDocking(s, 's1', { success: true, hits: 2 })
+    expect(rough.ships[0].condition).toBe(96)
+    expect(rough.money).toBe(s.money)
+  })
+})
+
+describe('save v3 → v4', () => {
+  it('adds events and settings', () => {
+    const g = newGame('A', 'helsinki', 'B') as unknown as Record<string, unknown>
+    const { pendingEvent: _p, settings: _s, ...v3state } = g
+    void _p
+    void _s
+    const v3 = { game: 'minunpoc', version: 3, savedAt: '', state: { ...v3state, ledger: { revenue: 0, fuel: 0, harbour: 0, canal: 0, running: 0, repairs: 0, interest: 0 } } }
+    const s = parseSave(JSON.stringify(v3)).state
+    expect(s.pendingEvent).toBeNull()
+    expect(s.settings.manualDocking).toBe(false)
+    expect(s.ledger.incidents).toBe(0)
+  })
+})

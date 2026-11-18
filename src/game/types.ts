@@ -21,6 +21,33 @@ export interface Voyage {
   /** May be fractional; the ship docks on the first whole day at or after it. */
   arriveDay: number
   contract: Contract | null
+  /** Share of the freight pay still earned (cargo damage lowers it). */
+  payFactor?: number
+  /** Kinds of decision events already met on this voyage (each at most once). */
+  events?: string[]
+}
+
+export interface EventOption {
+  id: string
+  label: string
+  detail: string
+}
+
+/** A decision waiting for the player; time stops until it is answered. */
+export interface PendingEvent {
+  kind: 'storm' | 'engine' | 'pirates'
+  shipId: string
+  day: number
+  title: string
+  text: string
+  options: EventOption[]
+}
+
+export interface Settings {
+  /** Steer ships into port yourself (minigame) instead of using a pilot. */
+  manualDocking: boolean
+  /** Let captains handle events at sea (always the safe option) without asking. */
+  autoEvents: boolean
 }
 
 export interface OwnedShip {
@@ -40,7 +67,7 @@ export interface OwnedShip {
   acquiredDay: number
 }
 
-export type LogKind = 'arrival' | 'delivery' | 'late' | 'departure' | 'info' | 'warning' | 'bank' | 'shipyard'
+export type LogKind = 'arrival' | 'delivery' | 'late' | 'departure' | 'info' | 'warning' | 'bank' | 'shipyard' | 'event' | 'news'
 
 export interface LogEntry {
   day: number
@@ -59,6 +86,8 @@ export interface Ledger {
   running: number
   repairs: number
   interest: number
+  /** Extra costs from events at sea (repairs at sea, guards, ransom). */
+  incidents: number
 }
 
 export interface GameState {
@@ -84,4 +113,6 @@ export interface GameState {
   takenListings: string[]
   /** Set when the bank refuses further credit while the till is empty. */
   bankrupt: boolean
+  pendingEvent: PendingEvent | null
+  settings: Settings
 }

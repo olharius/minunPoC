@@ -2,6 +2,7 @@ import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
 import { getRoute } from '../data/routes'
 import { getShipType, type ShipType } from '../data/shipTypes'
+import { portOnStrike } from './news'
 import { hashString, rng } from './rng'
 import type { GameState, OwnedShip } from './types'
 
@@ -17,8 +18,10 @@ export function sizeFactor(t: ShipType): number {
   return 0.5 + t.capacity / 40000
 }
 
-export function harbourFee(portId: string, t: ShipType): number {
-  return Math.round(getPort(portId).harbourFee * sizeFactor(t))
+/** Harbour fee for a call; doubled while the port is on strike. */
+export function harbourFee(portId: string, t: ShipType, state?: Pick<GameState, 'seed' | 'day'>): number {
+  const strike = state && portOnStrike(state, portId) ? 2 : 1
+  return Math.round(getPort(portId).harbourFee * sizeFactor(t) * strike)
 }
 
 export function canalToll(canalId: string, t: ShipType): number {
@@ -96,7 +99,7 @@ export function planVoyage(state: GameState, shipId: string, to: string): Voyage
   const fuelToBuy = Math.max(0, fuelNeeded - ship.fuel)
   const fuelCost = Math.round(fuelToBuy * fuelPrice(state, ship.portId))
   const runningCost = Math.round(arriveInDays * t.dailyCost)
-  const fee = harbourFee(to, t)
+  const fee = harbourFee(to, t, state)
   const canalTolls = route.canals.reduce((s, c) => s + canalToll(c, t), 0)
   return {
     from: ship.portId,

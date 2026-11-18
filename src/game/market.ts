@@ -3,6 +3,7 @@ import { PORTS } from '../data/ports'
 import { getRoute } from '../data/routes'
 import type { CargoClass, ShipType } from '../data/shipTypes'
 import { inRange, MARKET_WEEK } from './economy'
+import { cargoFactor, portOnStrike } from './news'
 import { hashString, rng } from './rng'
 import type { Contract, GameState, OwnedShip } from './types'
 
@@ -71,12 +72,13 @@ export function portOffers(state: GameState, portId: string): Contract[] {
     const [lo, hi] = starter ? [1500, 6000] : LOT[cls]
     // Skewed towards smaller lots; big lots are rarer.
     const tonnes = Math.round((lo + (hi - lo) * r.next() ** 1.6) / 100) * 100
-    const pay = freightPay(cargo, tonnes, nm, r.range(0.85, 1.25) * (0.9 + port.size * 0.05))
+    const pay = freightPay(cargo, tonnes, nm, r.range(0.85, 1.25) * (0.9 + port.size * 0.05) * cargoFactor(state, cargo.id))
     // Enough time for a 12-knot ship plus slack.
     const deadlineDay = startDay + Math.ceil(nm / (12 * 24) * 1.4) + r.int(6, 14)
     offers.push({ id: `${portId}-${week}-${i}`, cargoId: cargo.id, tonnes, from: portId, to: dest.id, pay, deadlineDay })
   }
   const taken = new Set(state.takenOffers)
+  if (portOnStrike(state, portId)) return []
   return offers.filter((o) => !taken.has(o.id)).sort((a, b) => b.pay - a.pay)
 }
 
