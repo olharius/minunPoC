@@ -5,7 +5,8 @@ import { fmtDate, fmtMoney } from '../game/format'
 import { currentDate } from '../game/newGame'
 import { downloadSave, readSaveFile } from '../game/save'
 import { acceptOffer, advanceDay, arrivals, depart, newlyIdle, refuel, type IdleNotice } from '../game/sim'
-import type { Contract, GameState } from '../game/types'
+import { offerFits, portOffers } from '../game/market'
+import type { Contract, GameState, OwnedShip } from '../game/types'
 import { borrow, repay } from '../game/bank'
 import { buyNewShip, buyUsedShip, sellShip, shipValue, startRepair, usedListings } from '../game/fleet'
 import { getShipType } from '../data/shipTypes'
@@ -30,7 +31,7 @@ interface Props {
   onQuit: () => void
 }
 
-type Selection = { kind: 'port'; id: string } | { kind: 'ship'; id: string } | null
+type Selection = { kind: 'port'; id: string; shipId?: string } | { kind: 'ship'; id: string } | null
 type Pending = { shipId: string; to: string; contract: Contract | null } | null
 type Purchase = { portId: string; typeId: string; price: number; condition: number; listingId?: string; name?: string } | null
 type RootTab = 'fleet' | 'finance' | 'log'
@@ -73,11 +74,11 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
     }
     const idle = newlyIdle(state, next)
     if (idle.length && pauseOnIdle) {
-      setIdleQueue((q) => [...q, ...idle])
+      setIdleQueue((q) => [...q, ...idle.filter((n) => !q.some((m) => m.shipId === n.shipId && m.reason === n.reason))])
       setRunning(false)
       clock.reset()
     } else if (idle.length) {
-      flash(idle.map((n) => idleText(next, n)).join(' '))
+      flash(noticeLines(next, idle).map((l) => l.text).join(' '))
     }
   }
   const clock = useClock(running && !pending && !purchase && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0 && idleQueue.length === 0, speed, step)
@@ -153,7 +154,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
               </button>
               <button onClick={() => fileRef.current?.click()}>Lataa tallennustiedosto…</button>
               <button onClick={() => setPauseOnIdle((p) => !p)}>
-                {pauseOnIdle ? '☑' : '☐'} Pysäytä aika, kun laiva jää odottamaan
+                {pauseOnIdle ? '☑' : '☐'} Pysäytä aika, kun laiva jää odottamaan tai sen satamaan tulee uusia rahteja
               </button>
               <button onClick={() => onChange({ ...state, settings: { ...state.settings, manualDocking: !state.settings.manualDocking } })}>
                 {state.settings.manualDocking ? '☑' : '☐'} Ohjaa laivat satamaan itse (minipeli)
@@ -187,9 +188,10 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
           )}
           {selection?.kind === 'port' ? (
             <PortPanel
-              key={selection.id}
+              key={`${selection.id}-${selection.shipId ?? ''}`}
               state={state}
               portId={selection.id}
+              initialShipId={selection.shipId}
               onClose={() => setSelection(null)}
               onChooseOffer={(shipId, offer) => setPending({ shipId, to: offer.to, contract: offer })}
               onChooseEmpty={(shipId, to) => setPending({ shipId, to, contract: null })}
@@ -313,26 +315,35 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
       })()}
 
       {idleQueue.length > 0 && !state.pendingEvent && dockQueue.length === 0 && !state.bankrupt && (() => {
-        const items = idleQueue.filter((n) => state.ships.some((s) => s.id === n.shipId))
+        const items = idleQueue.filter((n) => state.ships.some((s) => s.id === n.shipId && s.portId))
         const close = () => setIdleQueue([])
-        const show = (n: IdleNotice) => {
-          const ship = state.ships.find((s) => s.id === n.shipId)
-          if (ship?.portId) setSelection({ kind: 'port', id: ship.portId })
+        const show = (portId: string, shipId: string) => {
+          setSelection({ kind: 'port', id: portId, shipId })
           close()
         }
         if (!items.length) {
           setTimeout(close)
           return null
         }
+        const lines = noticeLines(state, items)
+        const free = items.filter((n) => n.reason !== 'offers').length
+        const title =
+          free === 0
+            ? 'Satamaan tuli uusia rahtitarjouksia'
+            : free === items.length
+              ? free === 1
+                ? 'Laiva odottaa käskyjä'
+                : `${free} laivaa odottaa käskyjä`
+              : 'Laivat odottavat käskyjä'
         return (
           <div className="modal-back">
             <div className="modal" role="alertdialog" aria-modal="true">
-              <h2>{items.length === 1 ? 'Laiva odottaa käskyjä' : `${items.length} laivaa odottaa käskyjä`}</h2>
+              <h2>{title}</h2>
               <ul className="idle-list">
-                {items.map((n) => (
-                  <li key={n.shipId + n.reason}>
-                    <span>{idleText(state, n)}</span>
-                    <button onClick={() => show(n)}>Näytä</button>
+                {lines.map((l) => (
+                  <li key={l.key}>
+                    <span>{l.text}</span>
+                    <button onClick={() => show(l.portId, l.shipId)}>{l.offers ? 'Näytä tarjoukset' : 'Näytä'}</button>
                   </li>
                 ))}
               </ul>
@@ -395,11 +406,61 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
   )
 }
 
-function idleText(state: GameState, n: IdleNotice): string {
-  const ship = state.ships.find((s) => s.id === n.shipId)
-  if (!ship?.portId) return ''
-  const port = getPort(ship.portId).name
-  return n.reason === 'arrived'
-    ? `${ship.name} saapui satamaan ${port} ja odottaa uutta rahtia.`
-    : `${ship.name} on korjattu satamassa ${port} ja on valmis lähtöön.`
+interface NoticeLine {
+  key: string
+  text: string
+  portId: string
+  shipId: string
+  offers: boolean
+}
+
+/**
+ * One line per ship that just became free, and one line per port whose
+ * freight board renewed (however many ships wait there), so a busy week
+ * change gives one short list instead of a flood of popups.
+ */
+function noticeLines(state: GameState, notices: IdleNotice[]): NoticeLine[] {
+  const lines: NoticeLine[] = []
+  const waiting = new Map<string, OwnedShip[]>()
+  for (const n of notices) {
+    const ship = state.ships.find((s) => s.id === n.shipId)
+    if (!ship?.portId) continue
+    if (n.reason === 'offers') {
+      const list = waiting.get(ship.portId) ?? []
+      if (!list.some((s) => s.id === ship.id)) list.push(ship)
+      waiting.set(ship.portId, list)
+      continue
+    }
+    const port = getPort(ship.portId).name
+    lines.push({
+      key: ship.id + n.reason,
+      portId: ship.portId,
+      shipId: ship.id,
+      offers: false,
+      text:
+        n.reason === 'arrived'
+          ? `${ship.name} saapui satamaan ${port} ja odottaa uutta rahtia.`
+          : `${ship.name} on korjattu satamassa ${port} ja on valmis lähtöön.`,
+    })
+  }
+  for (const [portId, ships] of waiting) {
+    const offers = portOffers(state, portId)
+    const fits = ships.map((s) => {
+      const t = getShipType(s.typeId)
+      return offers.filter((o) => offerFits(s, t, o) === null).length
+    })
+    const best = ships[fits.indexOf(Math.max(...fits))]
+    const who =
+      ships.length === 1
+        ? `${ships[0].name} odottaa siellä, ja sille sopii ${fits[0]} kpl.`
+        : `Siellä odottaa ${ships.length} laivaa: ${ships.map((s, i) => `${s.name} (${fits[i]} sopii)`).join(', ')}.`
+    lines.push({
+      key: `offers-${portId}`,
+      portId,
+      shipId: best.id,
+      offers: true,
+      text: `${getPort(portId).name}: ${offers.length} uutta rahtitarjousta. ${who}`,
+    })
+  }
+  return lines
 }
