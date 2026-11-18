@@ -6,7 +6,7 @@ import { fmtMoney, fmtNum } from './format'
 import { getCargo, marketWeek, offerFits, portOffers } from './market'
 import { monthEnd } from './bank'
 import { resolveEvent, rollSeaEvents } from './events'
-import { MONTH } from './calendar'
+import { MONTH, monthOf } from './calendar'
 import { finishRepairs } from './fleet'
 import { monthNews } from './news'
 import { addLog as log, clone, getShip as shipOf } from './state'
@@ -154,19 +154,36 @@ export function arrivals(before: GameState, after: GameState): OwnedShip[] {
 
 export interface IdleNotice {
   shipId: string
-  reason: 'arrived' | 'repaired'
+  /** arrived / repaired: the ship just became free. offers: it was already waiting and the port's freight board renewed. */
+  reason: 'arrived' | 'repaired' | 'offers'
 }
 
-/** Ships that were busy (at sea or in dock) before this step and now wait in port for orders. */
+/** Ships that wait in port for orders and need the player's attention after this step. */
 export function newlyIdle(before: GameState, after: GameState): IdleNotice[] {
   const out: IdleNotice[] = []
+  const boardChanged = marketWeek(before.day) !== marketWeek(after.day) || monthOf(before.day) !== monthOf(after.day)
+  const renewed = new Map<string, boolean>()
   for (const s of after.ships) {
     const b = before.ships.find((x) => x.id === s.id)
     if (!b || s.voyage || s.dockUntil !== null || !s.portId) continue
     if (b.voyage) out.push({ shipId: s.id, reason: 'arrived' })
     else if (b.dockUntil !== null) out.push({ shipId: s.id, reason: 'repaired' })
+    else if (boardChanged && b.portId === s.portId) {
+      let fresh = renewed.get(s.portId)
+      if (fresh === undefined) {
+        fresh = newOffers(before, after, s.portId).length > 0
+        renewed.set(s.portId, fresh)
+      }
+      if (fresh) out.push({ shipId: s.id, reason: 'offers' })
+    }
   }
   return out
+}
+
+/** Offers on a port's board after a step that were not there before it (a new week, or a strike that ended). */
+export function newOffers(before: GameState, after: GameState, portId: string): Contract[] {
+  const old = new Set(portOffers(before, portId).map((o) => o.id))
+  return portOffers(after, portId).filter((o) => !old.has(o.id))
 }
 
 export interface DockingResult {

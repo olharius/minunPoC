@@ -24,6 +24,8 @@ export interface PortActions {
 interface Props extends PortActions {
   state: GameState
   portId: string
+  /** Ship to show first when several wait here. */
+  initialShipId?: string
   onClose: () => void
 }
 
@@ -34,7 +36,7 @@ export function PortPanel(props: Props) {
   const p = getPort(portId)
   const here = state.ships.filter((s) => s.portId === portId)
   const [tab, setTab] = useState<Tab>('freight')
-  const [pickedShip, setPickedShip] = useState<string | null>(null)
+  const [pickedShip, setPickedShip] = useState<string | null>(props.initialShipId ?? null)
   const ship = here.find((s) => s.id === pickedShip) ?? here[0] ?? null
   const t = ship ? getShipType(ship.typeId) : null
   const sizeLabel = ['', 'Pieni satama', 'Keskikokoinen satama', 'Suursatama'][p.size]
