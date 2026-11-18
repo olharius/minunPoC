@@ -1,2 +1,2 @@
-// Working title. Change here once the final name is chosen.
-export const GAME_TITLE = 'Satamasta satamaan'
+// The game's name, shown on the start screen.
+export const GAME_TITLE = 'Merten Keisari'

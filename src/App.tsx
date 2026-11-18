@@ -17,7 +17,7 @@ export default function App() {
   return (
     <GameScreen
       state={state}
-      onLoad={setState}
+      onChange={setState}
       onQuit={() => {
         setAutosave(loadFromBrowser())
         setState(null)
