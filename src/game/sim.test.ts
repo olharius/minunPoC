@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PORTS } from '../data/ports'
 import { getRoute, pointAlong } from '../data/routes'
 import { getShipType } from '../data/shipTypes'
-import { latePay, planVoyage } from './economy'
+import { latePenalty, penaltyPerDay, planVoyage } from './economy'
 import { offerFits, portOffers } from './market'
 import { newGame } from './newGame'
 import { parseSave, toSaveFile } from './save'
@@ -95,10 +95,15 @@ describe('voyages', () => {
     expect(() => depart(s, 's1', 'helsinki')).toThrow('liian pitkä')
   })
 
-  it('cuts pay for late delivery', () => {
-    expect(latePay(100_000, 0)).toBe(100_000)
-    expect(latePay(100_000, 3)).toBe(70_000)
-    expect(latePay(100_000, 30)).toBe(30_000)
+  it('charges a daily contract penalty for late delivery, at most the freight pay', () => {
+    const normal = { pay: 100_000 }
+    const express = { pay: 100_000, express: true }
+    expect(penaltyPerDay(normal)).toBe(5_000)
+    expect(penaltyPerDay(express)).toBe(10_000)
+    expect(latePenalty(normal, 0)).toBe(0)
+    expect(latePenalty(normal, 3)).toBe(15_000)
+    expect(latePenalty(express, 3)).toBe(30_000)
+    expect(latePenalty(express, 30)).toBe(100_000)
   })
 })
 
@@ -115,5 +120,43 @@ describe('save migration', () => {
     expect(s.log).toEqual([])
     expect(typeof s.seed).toBe('number')
     expect(parseSave(JSON.stringify(toSaveFile(s))).state).toEqual(s)
+  })
+})
+
+describe('express jobs', () => {
+  const s0 = game()
+  const all = PORTS.flatMap((p) => [0, 7, 14].flatMap((d) => portOffers({ ...s0, day: d }, p.id)))
+
+  it('appear now and then, pay better and have tighter deadlines', () => {
+    const ex = all.filter((o) => o.express)
+    const share = ex.length / all.length
+    expect(share).toBeGreaterThan(0.08)
+    expect(share).toBeLessThan(0.3)
+    const perNm = (o: (typeof all)[number]) => (o.deadlineDay - Math.floor(s0.day / 7) * 7) / getRoute(o.from, o.to).nm
+    const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+    const normal = all.filter((o) => !o.express)
+    expect(avg(ex.map((o) => o.pay / o.tonnes))).toBeGreaterThan(avg(normal.map((o) => o.pay / o.tonnes)) * 1.3)
+    expect(avg(ex.filter((o) => getRoute(o.from, o.to).nm > 2000).map(perNm))).toBeLessThan(avg(normal.filter((o) => getRoute(o.from, o.to).nm > 2000).map(perNm)))
+  })
+
+  it('a 14-knot ship leaving at once makes the express deadline', () => {
+    for (const o of all.filter((x) => x.express && x.deadlineDay < 7)) {
+      const days = getRoute(o.from, o.to).nm / (14 * 0.92 * 24)
+      expect(Math.ceil(days)).toBeLessThanOrEqual(o.deadlineDay)
+    }
+  })
+
+  it('a late delivery pays full freight and books the penalty separately', () => {
+    let s = game()
+    const offer = portOffers(s, 'rotterdam').find((o) => !offerFits(s.ships[0], getShipType('coaster'), o))!
+    s = acceptOffer(s, 's1', offer.id)
+    // Push the deadline into the past so the delivery is late.
+    s.ships[0].voyage!.contract!.deadlineDay = 0
+    const before = s.ledger.revenue
+    s = runUntilDocked(s)
+    const late = s.day
+    expect(s.ledger.revenue - before).toBe(offer.pay)
+    expect(s.ledger.penalties).toBe(latePenalty(offer, late))
+    expect(s.log.find((e) => e.kind === 'late')?.amount).toBe(-latePenalty(offer, late))
   })
 })

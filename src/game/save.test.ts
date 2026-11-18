@@ -12,6 +12,18 @@ describe('save files', () => {
     expect(back.state).toEqual(g)
   })
 
+  it('upgrades a version 4 save with a voyage under way', () => {
+    const g = newGame('Vanha', 'helsinki', 'B')
+    const { penalties: _, ...oldLedger } = g.ledger
+    void _
+    const contract = { id: 'x', cargoId: 'grain', tonnes: 1000, from: 'helsinki', to: 'london', pay: 50_000, deadlineDay: 5 }
+    const ships = [{ ...g.ships[0], portId: null, voyage: { from: 'helsinki', to: 'london', departDay: 0, arriveDay: 4, contract } }]
+    const v4 = { game: 'minunpoc', version: 4, savedAt: '', state: { ...g, ledger: oldLedger, ships } }
+    const s = parseSave(JSON.stringify(v4)).state
+    expect(s.ledger.penalties).toBe(0)
+    expect(s.ships[0].voyage?.contract?.pay).toBe(50_000)
+  })
+
   it('rejects other JSON', () => {
     expect(() => parseSave('{"foo":1}')).toThrow('ei ole tämän pelin')
     expect(() => parseSave('not json')).toThrow('kelvollinen')

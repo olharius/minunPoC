@@ -4,7 +4,7 @@ import { getRoute } from '../data/routes'
 import { getShipType, type ShipType } from '../data/shipTypes'
 import { portOnStrike } from './news'
 import { hashString, rng } from './rng'
-import type { GameState, OwnedShip } from './types'
+import type { Contract, GameState, OwnedShip } from './types'
 
 /** Market and price cycles, in days. */
 export const MARKET_WEEK = 7
@@ -126,8 +126,18 @@ export function voyageFuelValue(state: GameState, shipId: string, to: string): n
   return Math.round(days * effectiveFuelPerDay(t, ship.condition) * fuelPrice(state, ship.portId!))
 }
 
-/** Pay after a late delivery: −10 % per day late, at least 30 %. */
-export function latePay(pay: number, daysLate: number): number {
-  if (daysLate <= 0) return pay
-  return Math.round(pay * Math.max(0.3, 1 - 0.1 * daysLate))
+/** Daily contract penalty as a share of the freight pay. */
+export const PENALTY_RATE = 0.05
+export const EXPRESS_PENALTY_RATE = 0.1
+
+/** Contract penalty per day late, dollars. */
+export function penaltyPerDay(c: Pick<Contract, 'pay' | 'express' | 'penaltyPerDay'>): number {
+  if (c.penaltyPerDay !== undefined) return c.penaltyPerDay
+  return Math.round((c.pay * (c.express ? EXPRESS_PENALTY_RATE : PENALTY_RATE)) / 100) * 100
+}
+
+/** Total contract penalty for a delivery `daysLate` days late. Never more than the freight pay. */
+export function latePenalty(c: Pick<Contract, 'pay' | 'express' | 'penaltyPerDay'>, daysLate: number): number {
+  if (daysLate <= 0) return 0
+  return Math.min(c.pay, daysLate * penaltyPerDay(c))
 }

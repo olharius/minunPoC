@@ -8,10 +8,14 @@ export interface Contract {
   tonnes: number
   from: string
   to: string
-  /** Paid on delivery, dollars. Reduced if late. */
+  /** Paid on delivery, dollars. */
   pay: number
   /** Last day (game day number) for on-time delivery. */
   deadlineDay: number
+  /** Express job: tight deadline, better pay, stiffer penalty. */
+  express?: boolean
+  /** Contract penalty per day late, dollars (older saves: see `penaltyPerDay`). */
+  penaltyPerDay?: number
 }
 
 export interface Voyage {
@@ -88,6 +92,8 @@ export interface Ledger {
   interest: number
   /** Extra costs from events at sea (repairs at sea, guards, ransom). */
   incidents: number
+  /** Contract penalties paid for late deliveries. */
+  penalties: number
 }
 
 export interface GameState {

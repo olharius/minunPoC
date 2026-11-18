@@ -29,7 +29,7 @@ export function newGame(companyName: string, homePortId: string, shipName: strin
     seed: Math.floor(Math.random() * 2 ** 31),
     takenOffers: [],
     log: [{ day: 0, kind: 'info', text: `${companyName.trim() || 'Nimetön Varustamo'} perustettiin. Etsi ensimmäinen rahti kotisatamasta!` }],
-    ledger: { revenue: 0, fuel: 0, harbour: 0, canal: 0, running: 0, repairs: 0, interest: 0, incidents: 0 },
+    ledger: { revenue: 0, fuel: 0, harbour: 0, canal: 0, running: 0, repairs: 0, interest: 0, incidents: 0, penalties: 0 },
     loan: 0,
     takenListings: [],
     bankrupt: false,

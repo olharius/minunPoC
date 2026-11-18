@@ -2,7 +2,7 @@ import { CARGO_TYPES, type CargoType } from '../data/cargoTypes'
 import { PORTS } from '../data/ports'
 import { getRoute } from '../data/routes'
 import type { CargoClass, ShipType } from '../data/shipTypes'
-import { inRange, MARKET_WEEK } from './economy'
+import { inRange, MARKET_WEEK, penaltyPerDay } from './economy'
 import { cargoFactor, portOnStrike } from './news'
 import { hashString, rng } from './rng'
 import type { Contract, GameState, OwnedShip } from './types'
@@ -22,6 +22,9 @@ const LOT: Record<CargoClass, [number, number]> = {
   bulk: [8000, 65000],
   liquid: [8000, 95000],
 }
+
+/** Roughly one offer in five is an express job. */
+const EXPRESS_SHARE = 0.2
 
 /** Share of offers per cargo class (small ships should always find work). */
 const CLASS_WEIGHT: Record<CargoClass, number> = { general: 3, container: 2.5, bulk: 2.5, liquid: 2 }
@@ -72,10 +75,18 @@ export function portOffers(state: GameState, portId: string): Contract[] {
     const [lo, hi] = starter ? [1500, 6000] : LOT[cls]
     // Skewed towards smaller lots; big lots are rarer.
     const tonnes = Math.round((lo + (hi - lo) * r.next() ** 1.6) / 100) * 100
-    const pay = freightPay(cargo, tonnes, nm, r.range(0.85, 1.25) * (0.9 + port.size * 0.05) * cargoFactor(state, cargo.id))
-    // Enough time for a 12-knot ship plus slack.
-    const deadlineDay = startDay + Math.ceil(nm / (12 * 24) * 1.4) + r.int(6, 14)
-    offers.push({ id: `${portId}-${week}-${i}`, cargoId: cargo.id, tonnes, from: portId, to: dest.id, pay, deadlineDay })
+    const express = !starter && r.next() < EXPRESS_SHARE
+    const rate = r.range(0.85, 1.25) * (0.9 + port.size * 0.05) * cargoFactor(state, cargo.id)
+    const pay = freightPay(cargo, tonnes, nm, express ? rate * r.range(1.4, 1.7) : rate)
+    const deadlineDay = express
+      ? // Only a few days' slack for a 14-knot ship that leaves at once.
+        startDay + Math.ceil(nm / (14 * 0.92 * 24)) + r.int(2, 5)
+      : // Enough time for a 12-knot ship plus slack.
+        startDay + Math.ceil((nm / (12 * 24)) * 1.4) + r.int(6, 14)
+    const c: Contract = { id: `${portId}-${week}-${i}`, cargoId: cargo.id, tonnes, from: portId, to: dest.id, pay, deadlineDay }
+    if (express) c.express = true
+    c.penaltyPerDay = penaltyPerDay(c)
+    offers.push(c)
   }
   const taken = new Set(state.takenOffers)
   if (portOnStrike(state, portId)) return []
