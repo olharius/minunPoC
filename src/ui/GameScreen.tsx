@@ -6,7 +6,13 @@ import { currentDate } from '../game/newGame'
 import { downloadSave, readSaveFile } from '../game/save'
 import { acceptOffer, advanceDay, arrivals, depart, refuel } from '../game/sim'
 import type { Contract, GameState } from '../game/types'
+import { borrow, repay } from '../game/bank'
+import { buyNewShip, buyUsedShip, sellShip, shipValue, startRepair, usedListings } from '../game/fleet'
+import { getShipType } from '../data/shipTypes'
+import { BuyDialog } from './BuyDialog'
+import { FinancePanel } from './panels/FinancePanel'
 import { FleetPanel } from './panels/FleetPanel'
+import { LogList } from './panels/LogList'
 import { PortPanel } from './panels/PortPanel'
 import { ShipPanel } from './panels/ShipPanel'
 import { SPEEDS, useClock } from './useClock'
@@ -21,10 +27,14 @@ interface Props {
 
 type Selection = { kind: 'port'; id: string } | { kind: 'ship'; id: string } | null
 type Pending = { shipId: string; to: string; contract: Contract | null } | null
+type Purchase = { portId: string; typeId: string; price: number; condition: number; listingId?: string; name?: string } | null
+type RootTab = 'fleet' | 'finance' | 'log'
 
 export function GameScreen({ state, onChange, onQuit }: Props) {
   const [selection, setSelection] = useState<Selection>(null)
   const [pending, setPending] = useState<Pending>(null)
+  const [purchase, setPurchase] = useState<Purchase>(null)
+  const [rootTab, setRootTab] = useState<RootTab>('fleet')
   const [previewTo, setPreviewTo] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [speed, setSpeed] = useState(0)
@@ -54,7 +64,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
       }
     }
   }
-  const clock = useClock(running && !pending, speed, step)
+  const clock = useClock(running && !pending && !purchase && !state.bankrupt, speed, step)
   const time = state.day + (running ? clock.fraction : 0)
 
   const act = (fn: () => GameState) => {
@@ -82,6 +92,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
             💰 {fmtMoney(state.money)}
           </span>
           <span title="Laivasto">⚓ {state.ships.length}</span>
+          {state.loan > 0 && <span title="Laina">🏦 {fmtMoney(-state.loan)}</span>}
         </div>
         <div className="time-controls" role="group" aria-label="Aika">
           <button
@@ -161,6 +172,16 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
               onChooseOffer={(shipId, offer) => setPending({ shipId, to: offer.to, contract: offer })}
               onChooseEmpty={(shipId, to) => setPending({ shipId, to, contract: null })}
               onRefuel={(shipId) => act(() => refuel(state, shipId))}
+              onRepair={(shipId) => act(() => startRepair(state, shipId))}
+              onSell={(shipId) => {
+                const ship = state.ships.find((x) => x.id === shipId)!
+                if (window.confirm(`Myydäänkö ${ship.name} hintaan ${fmtMoney(shipValue(ship))}?`)) act(() => sellShip(state, shipId))
+              }}
+              onBuyNew={(portId, typeId) => setPurchase({ portId, typeId, price: getShipType(typeId).price, condition: 100 })}
+              onBuyUsed={(listingId) => {
+                const l = usedListings(state, selection.id).find((x) => x.id === listingId)
+                if (l) setPurchase({ portId: l.portId, typeId: l.typeId, price: l.price, condition: l.condition, listingId: l.id, name: l.name })
+              }}
               onPreview={setPreviewTo}
             />
           ) : selection?.kind === 'ship' ? (
@@ -172,13 +193,32 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
               onSelectPort={(id) => setSelection({ kind: 'port', id })}
             />
           ) : (
-            <FleetPanel
-              state={state}
-              onSelectShip={(id) => {
-                const s = state.ships.find((x) => x.id === id)
-                setSelection(s?.portId ? { kind: 'port', id: s.portId } : { kind: 'ship', id })
-              }}
-            />
+            <>
+              <div className="tabs" role="tablist">
+                {(
+                  [
+                    ['fleet', 'Laivasto'],
+                    ['finance', 'Talous'],
+                    ['log', 'Tapahtumat'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button key={id} role="tab" aria-selected={rootTab === id} className={rootTab === id ? 'active' : ''} onClick={() => setRootTab(id)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {rootTab === 'fleet' && (
+                <FleetPanel
+                  state={state}
+                  onSelectShip={(id) => {
+                    const s = state.ships.find((x) => x.id === id)
+                    setSelection(s?.portId ? { kind: 'port', id: s.portId } : { kind: 'ship', id })
+                  }}
+                />
+              )}
+              {rootTab === 'finance' && <FinancePanel state={state} onBorrow={(a) => act(() => borrow(state, a))} onRepay={(a) => act(() => repay(state, a))} />}
+              {rootTab === 'log' && <LogList state={state} limit={80} />}
+            </>
           )}
         </aside>
       </main>
@@ -199,6 +239,53 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
             if (!running) flash('Laiva lähti. Käynnistä aika ▶-painikkeesta.')
           }}
         />
+      )}
+
+      {purchase && (
+        <BuyDialog
+          state={state}
+          portId={purchase.portId}
+          typeId={purchase.typeId}
+          price={purchase.price}
+          condition={purchase.condition}
+          suggestedName={purchase.name}
+          onCancel={() => setPurchase(null)}
+          onConfirm={(name, loan) => {
+            const p = purchase
+            setPurchase(null)
+            act(() => {
+              const funded = loan > 0 ? borrow(state, loan) : state
+              return p.listingId ? buyUsedShip(funded, p.listingId, name) : buyNewShip(funded, p.portId, p.typeId, name)
+            })
+            flash(`${name} liittyi laivastoon!`)
+          }}
+        />
+      )}
+
+      {state.bankrupt && (
+        <div className="modal-back">
+          <div className="modal" role="alertdialog" aria-modal="true">
+            <h2>Konkurssi</h2>
+            <p>
+              Pankki ei enää myöntänyt lisää luottoa, ja {state.companyName} asetettiin konkurssiin {fmtDate(currentDate(state))}.
+            </p>
+            <dl className="facts money">
+              <dt>Toimintapäiviä</dt>
+              <dd>{state.day}</dd>
+              <dt>Laivoja</dt>
+              <dd>{state.ships.length}</dd>
+              <dt>Rahtitulot yhteensä</dt>
+              <dd>{fmtMoney(state.ledger.revenue)}</dd>
+            </dl>
+            <p className="hint">Voit ladata aiemman tallennustiedoston tai aloittaa uuden pelin päävalikosta.</p>
+            <div className="row end">
+              <button onClick={() => fileRef.current?.click()}>Lataa tallennus…</button>
+              <button className="primary" onClick={onQuit}>
+                Päävalikkoon
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {notice && <div className="toast">{notice}</div>}

@@ -1,9 +1,11 @@
 import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
 import { getShipType } from '../data/shipTypes'
-import { fuelPrice, harbourFee, latePay, planVoyage } from './economy'
+import { effectiveFuelPerDay, fuelPrice, harbourFee, latePay, planVoyage } from './economy'
 import { fmtMoney, fmtNum } from './format'
 import { getCargo, marketWeek, offerFits, portOffers } from './market'
+import { monthEnd } from './bank'
+import { finishRepairs, MONTH } from './fleet'
 import type { Contract, GameState, LogEntry, OwnedShip } from './types'
 
 // All game rules that change state live here. Each function returns a new
@@ -47,6 +49,7 @@ export function refuel(state: GameState, shipId: string, tonnes?: number): GameS
 export function depart(state: GameState, shipId: string, to: string, contract: Contract | null = null): GameState {
   const plan = planVoyage(state, shipId, to)
   const t = getShipType(shipOf(state, shipId).typeId)
+  if (shipOf(state, shipId).dockUntil !== null) throw new Error('Laiva on telakalla.')
   if (plan.fuelNeeded > t.fuelCapacity) throw new Error('Matka on liian pitkä yhdellä tankillisella.')
   let s = state
   if (plan.fuelToBuy > 0) s = refuel(s, shipId, plan.fuelToBuy)
@@ -86,27 +89,32 @@ export function acceptOffer(state: GameState, shipId: string, offerId: string): 
 /** Advance the clock one day: costs, fuel, wear, arrivals. */
 export function advanceDay(state: GameState): GameState {
   const s = clone(state)
+  if (s.bankrupt) return state
   const prevWeek = marketWeek(s.day)
   s.day += 1
   if (marketWeek(s.day) !== prevWeek) s.takenOffers = []
+  if (s.day % MONTH === 0) s.takenListings = []
 
   let running = 0
   for (const ship of s.ships) {
     const t = getShipType(ship.typeId)
     running += t.dailyCost
+    if (ship.dockUntil !== null) running -= t.dailyCost / 2 // crew partly ashore while in dock
     if (!ship.voyage) continue
     // Burn only for the part of the day actually spent sailing.
     const sailed = Math.min(1, ship.voyage.arriveDay - (s.day - 1))
-    ship.fuel = Math.max(0, Math.round((ship.fuel - t.fuelPerDay * sailed) * 10) / 10)
+    ship.fuel = Math.max(0, Math.round((ship.fuel - effectiveFuelPerDay(t, ship.condition) * sailed) * 10) / 10)
     ship.condition = Math.max(0, Math.round((ship.condition - WEAR_PER_DAY) * 100) / 100)
     if (s.day >= ship.voyage.arriveDay) arrive(s, ship)
   }
   s.money -= running
   s.ledger.running += running
+  finishRepairs(s)
 
   if (state.money >= 0 && s.money < 0) {
-    log(s, { kind: 'warning', text: 'Kassa on miinuksella! Hanki tuloja pian.' })
+    log(s, { kind: 'warning', text: 'Kassa on miinuksella! Kuun lopussa pankki kattaa vajeen lainalla, jos luottoa on jäljellä.' })
   }
+  monthEnd(s)
   return s
 }
 

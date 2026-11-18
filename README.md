@@ -10,7 +10,7 @@ Peli tallentuu automaattisesti selaimeen. Valikon kohdalla *Vie tallennus tiedos
 
 1. **Perusta** (valmis): maailmankartta, satamat, uusi peli, tallennus ja julkaisu.
 2. **Pelin ydin** (valmis): rahtimarkkina, merireitit kanavineen, matkat, polttoaine, satamamaksut, kuluva aika ja tapahtumaloki.
-3. **Varustamon kasvu:** laivojen osto ja myynti, laivatyypit, lainat, huolto ja laivastonäkymä.
+3. **Varustamon kasvu** (valmis): kahdeksan laivatyyppiä, uudet ja käytetyt laivat, myynti, kuluminen ja korjaukset, pankkilaina, konkurssi sekä laivasto- ja talousnäkymä.
 4. **Myöhemmin:** tapahtumat merellä, satamaan ohjaaminen minipelinä, grafiikan viimeistely.
 
 ## Kehittäjälle
@@ -31,7 +31,7 @@ Pelin sisältö on datatiedostoissa, joten sitä voi laajentaa koskematta pelilo
 - `src/data/canals.ts`: kanavat ja niiden maksut
 - `src/data/routes.json`: satamien väliset merireitit, jotka `npm run routes` laskee Natural Earth -rantaviivoista (`scripts/buildRoutes.ts`)
 
-Pelisäännöt ovat kansiossa `src/game/`: `economy.ts` (hinnat ja kulut), `market.ts` (rahtitarjoukset) ja `sim.ts` (päivän kulku, lähdöt ja saapumiset).
+Pelisäännöt ovat kansiossa `src/game/`: `economy.ts` (hinnat ja kulut), `market.ts` (rahtitarjoukset), `fleet.ts` (laivakauppa ja korjaukset), `bank.ts` (lainat ja konkurssi) ja `sim.ts` (päivän kulku, lähdöt ja saapumiset).
 
 Pelitila (`src/game/types.ts`) on pelkkää JSONia. Kun sen rakenne muuttuu, nosta `SAVE_VERSION`-arvoa ja lisää muunnos `src/game/save.ts`-tiedoston `migrate`-funktioon, jotta vanhat tallennukset toimivat edelleen.
 

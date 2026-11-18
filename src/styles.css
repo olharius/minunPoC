@@ -241,3 +241,13 @@ button:disabled { opacity: 0.5; cursor: default; }
   .time-controls { order: 2; }
   .menu { order: 2; }
 }
+
+/* ---------- tabs, shipyard, fleet ---------- */
+.tabs { display: flex; gap: 4px; margin: 16px 0 10px; border-bottom: 2px solid var(--line); }
+.panel > .tabs:first-child { margin-top: 0; }
+.tabs button { background: transparent; border: none; border-radius: 8px 8px 0 0; padding: 0.45rem 0.8rem; color: var(--muted); font-weight: 600; margin-bottom: -2px; border-bottom: 2px solid transparent; }
+.tabs button.active { color: var(--bg); border-bottom-color: var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.status.docked { color: #8a5a00; }
+.status.idle { color: #b3261e; font-weight: 600; }
+.cond { font-size: 0.85rem; font-variant-numeric: tabular-nums; }

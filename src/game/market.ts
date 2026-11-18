@@ -16,14 +16,14 @@ const LOADS: Record<CargoClass, CargoClass[]> = {
 
 /** Typical lot sizes in tonnes. */
 const LOT: Record<CargoClass, [number, number]> = {
-  general: [1500, 6000],
-  container: [1500, 16000],
-  bulk: [8000, 30000],
-  liquid: [8000, 40000],
+  general: [1500, 14000],
+  container: [1500, 40000],
+  bulk: [8000, 65000],
+  liquid: [8000, 95000],
 }
 
 /** Share of offers per cargo class (small ships should always find work). */
-const CLASS_WEIGHT: Record<CargoClass, number> = { general: 4, container: 2, bulk: 2, liquid: 2 }
+const CLASS_WEIGHT: Record<CargoClass, number> = { general: 3, container: 2.5, bulk: 2.5, liquid: 2 }
 
 export function canLoad(ship: ShipType, cargo: CargoType): boolean {
   return LOADS[ship.cargoClass].includes(cargo.cargoClass)
@@ -68,8 +68,9 @@ export function portOffers(state: GameState, portId: string): Contract[] {
     const cargo = r.pick(CARGO_TYPES.filter((c) => c.cargoClass === cls))
     const dest = r.pick(starter ? regional : dests, (p) => p.size * p.size)
     const nm = getRoute(portId, dest.id).nm
-    const [lo, hi] = LOT[cls]
-    const tonnes = Math.round(r.range(lo, hi) / 100) * 100
+    const [lo, hi] = starter ? [1500, 6000] : LOT[cls]
+    // Skewed towards smaller lots; big lots are rarer.
+    const tonnes = Math.round((lo + (hi - lo) * r.next() ** 1.6) / 100) * 100
     const pay = freightPay(cargo, tonnes, nm, r.range(0.85, 1.25) * (0.9 + port.size * 0.05))
     // Enough time for a 12-knot ship plus slack.
     const deadlineDay = startDay + Math.ceil(nm / (12 * 24) * 1.4) + r.int(6, 14)
@@ -83,6 +84,7 @@ export function offerFits(ship: OwnedShip, t: ShipType, o: Contract): string | n
   if (!canLoad(t, getCargo(o.cargoId))) return 'Väärä laivatyyppi'
   if (o.tonnes > t.capacity) return 'Ei mahdu'
   if (ship.voyage) return 'Laiva on merellä'
-  if (!inRange(t, getRoute(o.from, o.to).nm)) return 'Liian pitkä matka'
+  if (!inRange(t, getRoute(o.from, o.to).nm, ship.condition)) return 'Liian pitkä matka'
+  if (ship.dockUntil !== null) return 'Laiva on telakalla'
   return null
 }

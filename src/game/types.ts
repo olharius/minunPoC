@@ -34,9 +34,13 @@ export interface OwnedShip {
   /** 0–100. */
   condition: number
   voyage: Voyage | null
+  /** In dry dock for repairs until this day (null when not docked). */
+  dockUntil: number | null
+  /** Day the company got the ship (for the fleet list). */
+  acquiredDay: number
 }
 
-export type LogKind = 'arrival' | 'delivery' | 'late' | 'departure' | 'info' | 'warning'
+export type LogKind = 'arrival' | 'delivery' | 'late' | 'departure' | 'info' | 'warning' | 'bank' | 'shipyard'
 
 export interface LogEntry {
   day: number
@@ -53,6 +57,8 @@ export interface Ledger {
   harbour: number
   canal: number
   running: number
+  repairs: number
+  interest: number
 }
 
 export interface GameState {
@@ -72,4 +78,10 @@ export interface GameState {
   takenOffers: string[]
   log: LogEntry[]
   ledger: Ledger
+  /** Bank loan outstanding, dollars. */
+  loan: number
+  /** Used-ship listings already bought this month. */
+  takenListings: string[]
+  /** Set when the bank refuses further credit while the till is empty. */
+  bankrupt: boolean
 }
