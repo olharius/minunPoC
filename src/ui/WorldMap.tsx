@@ -4,6 +4,7 @@ import { feature } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import landTopo from 'world-atlas/land-110m.json'
 import { PORTS, type Port } from '../data/ports'
+import { getRoute, pointAlong, remainingPath, type Route } from '../data/routes'
 import type { OwnedShip } from '../game/types'
 
 const W = 1000
@@ -38,12 +39,28 @@ interface View {
 
 interface Props {
   ships: OwnedShip[]
+  /** Game time in days, fractional while the clock runs (for smooth movement). */
+  time: number
   homePortId: string
   selectedPortId: string | null
+  selectedShipId: string | null
+  /** A route to highlight, e.g. while choosing a destination. */
+  preview: Route | null
   onSelectPort: (id: string | null) => void
+  onSelectShip: (id: string) => void
 }
 
-export function WorldMap({ ships, homePortId, selectedPortId, onSelectPort }: Props) {
+interface AtSea {
+  ship: OwnedShip
+  route: Route
+  t: number
+}
+
+function lineD(points: [number, number][]): string {
+  return path({ type: 'LineString', coordinates: points }) ?? ''
+}
+
+export function WorldMap({ ships, time, homePortId, selectedPortId, selectedShipId, preview, onSelectPort, onSelectShip }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ px: number; py: number; vx: number; vy: number; moved: boolean } | null>(null)
@@ -87,6 +104,15 @@ export function WorldMap({ ships, homePortId, selectedPortId, onSelectPort }: Pr
     for (const s of ships) if (s.portId) m.set(s.portId, [...(m.get(s.portId) ?? []), s])
     return m
   }, [ships])
+
+  const atSea: AtSea[] = ships
+    .filter((s) => s.voyage)
+    .map((ship) => {
+      const v = ship.voyage!
+      const route = getRoute(v.from, v.to)
+      const t = Math.min(1, Math.max(0, (time - v.departDay) / (v.arriveDay - v.departDay)))
+      return { ship, route, t }
+    })
 
   const zoomAt = (factor: number, cx = v.x + v.w / 2, cy = v.y + vh / 2) => {
     const w = v.w / factor
@@ -173,6 +199,16 @@ export function WorldMap({ ships, homePortId, selectedPortId, onSelectPort }: Pr
         <path d={LAND_PATH} fill="url(#land)" className="land" filter="url(#coast)" pointerEvents="none" />
         <path d={SPHERE_PATH} className="sphere-edge" pointerEvents="none" />
 
+        {atSea.map(({ ship, route, t }) => (
+          <path
+            key={`r-${ship.id}`}
+            d={lineD(remainingPath(route, t))}
+            className={`route${ship.id === selectedShipId ? ' selected' : ''}`}
+            pointerEvents="none"
+          />
+        ))}
+        {preview && <path d={lineD(preview.path)} className="route preview" pointerEvents="none" />}
+
         {PORTS.map((p) => {
           const [x, y] = project(p)
           const here = shipsByPort.get(p.id) ?? []
@@ -201,6 +237,37 @@ export function WorldMap({ ships, homePortId, selectedPortId, onSelectPort }: Pr
                 </text>
               )}
               {here.length > 0 && <ShipMarker x={r + 3 / k} scale={1.3 / k} count={here.length} />}
+            </g>
+          )
+        })}
+
+        {atSea.map(({ ship, route, t }) => {
+          const [x, y] = projection(pointAlong(route, t)) ?? [0, 0]
+          const [ax] = projection(pointAlong(route, Math.min(1, t + 0.02))) ?? [0, 0]
+          const [bx] = projection(pointAlong(route, Math.max(0, t - 0.02))) ?? [0, 0]
+          const west = ax < bx
+          const sc = 1.5 / k
+          return (
+            <g
+              key={`s-${ship.id}`}
+              data-ship={ship.id}
+              className={`sea-ship${ship.id === selectedShipId ? ' selected' : ''}`}
+              transform={`translate(${x},${y})`}
+              onPointerUp={(e) => {
+                if (drag.current?.moved) return
+                e.stopPropagation()
+                drag.current = null
+                onSelectShip(ship.id)
+              }}
+            >
+              <circle r={12 / k} className="hit" />
+              {ship.id === selectedShipId && <circle r={11 / k} className="ring" />}
+              <g transform={`scale(${west ? -sc : sc},${sc}) translate(-8,-6)`}>
+                <path d="M-6 7 Q-2 6 0 7.5" className="wake" />
+                <path d="M0 4 L16 4 L13.5 8 L2 8 Z" className="hull" />
+                <rect x="10" y="0" width="4" height="4" className="bridge" />
+                <rect x="3" y="1.5" width="6" height="2.5" className={ship.voyage?.contract ? 'cargo' : 'cargo empty'} />
+              </g>
             </g>
           )
         })}

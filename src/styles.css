@@ -177,3 +177,67 @@ input, select {
   .map-wrap { flex: none; height: 55vh; }
   .panel { width: 100%; flex: 1; border-left: none; border-top: 2px solid var(--gold); }
 }
+
+/* ---------- routes and ships at sea ---------- */
+.route { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.4; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.route.selected { stroke: var(--gold); stroke-width: 2; }
+.route.preview { stroke: var(--accent); stroke-width: 2.4; stroke-dasharray: 6 4; }
+.sea-ship { cursor: pointer; }
+.sea-ship .hit { fill: transparent; }
+.sea-ship .ring { fill: rgba(242, 193, 78, 0.25); stroke: var(--gold); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sea-ship .hull { fill: #1b1b1b; stroke: #fff; stroke-width: 0.5; }
+.sea-ship .bridge { fill: #fff; }
+.sea-ship .cargo { fill: var(--accent); }
+.sea-ship .cargo.empty { fill: #9aa; }
+.sea-ship .wake { fill: none; stroke: rgba(255, 255, 255, 0.8); stroke-width: 0.8; }
+
+/* ---------- time controls ---------- */
+.time-controls { display: flex; gap: 2px; background: rgba(0, 0, 0, 0.25); padding: 3px; border-radius: 10px; }
+.time-controls button { background: transparent; border: none; color: #f3ead6; padding: 0.35rem 0.6rem; font-size: 0.85rem; letter-spacing: -2px; border-radius: 7px; }
+.time-controls button.active { background: var(--gold); color: var(--bg); }
+
+/* ---------- panel content ---------- */
+.tip { background: #fff3cf; border: 1px solid var(--gold); border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; margin-bottom: 14px; }
+.pos { color: #1d7a3a; }
+.neg { color: #b3261e; }
+.stats .neg { color: #ff8f7a; }
+.facts .total { font-weight: 700; border-top: 1px solid var(--line); padding-top: 4px; }
+.ship-card { width: 100%; text-align: left; background: transparent; border: none; padding: 0; }
+.status { font-size: 0.85rem; margin-top: 4px; }
+.status.at-sea { color: #1f5f8b; }
+.status.in-port { color: #6b4f1d; }
+.ship-in-port { background: #fffaf0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.offers { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.offer { background: #fffaf0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 0.88rem; }
+.offer.no-fit { opacity: 0.6; }
+.offer-top { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
+.offer-pay { color: #1d7a3a; font-variant-numeric: tabular-nums; }
+.offer-mid { color: var(--muted); margin-top: 2px; }
+.offer-actions { margin-top: 6px; display: flex; justify-content: flex-end; }
+.why { font-size: 0.8rem; color: var(--muted); font-style: italic; }
+button.small { padding: 0.3rem 0.7rem; font-size: 0.85rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+.row select { flex: 1; min-width: 0; }
+.row.end { justify-content: flex-end; margin-top: 12px; }
+.voyage-box { background: #fffaf0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
+.route-line { display: flex; gap: 8px; align-items: center; font-weight: 700; }
+.progress { height: 6px; background: var(--panel-2); border-radius: 3px; margin: 8px 0 4px; overflow: hidden; }
+.progress div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--gold)); }
+
+.log { list-style: none; padding: 0; margin: 0; font-size: 0.82rem; display: flex; flex-direction: column; gap: 6px; }
+.log li { display: grid; grid-template-columns: 18px 1fr auto; gap: 6px; align-items: start; }
+.log-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+.log-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.log-warning { color: #b3261e; font-weight: 600; }
+
+/* ---------- modal ---------- */
+.modal-back { position: fixed; inset: 0; background: rgba(4, 14, 24, 0.55); display: grid; place-items: center; padding: 16px; z-index: 30; }
+.modal { background: var(--panel); border-radius: 14px; padding: 18px 20px; width: min(440px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); border-top: 4px solid var(--gold); }
+.modal h2 { margin: 0; color: var(--bg); font-size: 1.3rem; }
+.modal h3 { margin: 16px 0 4px; font-size: 0.95rem; }
+.facts.money dd { text-align: right; }
+
+@media (max-width: 760px) {
+  .time-controls { order: 2; }
+  .menu { order: 2; }
+}

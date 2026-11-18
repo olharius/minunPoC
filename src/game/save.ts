@@ -2,7 +2,7 @@ import type { GameState } from './types'
 
 // Save format. Bump SAVE_VERSION and add a step to `migrate` whenever
 // GameState changes shape, so old saves keep loading.
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 2
 const STORAGE_KEY = 'minunpoc.autosave'
 
 export interface SaveFile {
@@ -35,9 +35,17 @@ export function parseSave(text: string): SaveFile {
   return { game: 'minunpoc', version: SAVE_VERSION, savedAt: String(data.savedAt ?? ''), state: migrated }
 }
 
-function migrate(_version: number, state: Record<string, unknown>): GameState {
-  // No older versions yet. Future: if (version < 2) { ...upgrade... }
-  return state as unknown as GameState
+function migrate(version: number, state: Record<string, unknown>): GameState {
+  const s = { ...state } as Record<string, unknown>
+  if (version < 2) {
+    // v2: voyages, markets, log and ledger.
+    s.ships = (s.ships as Record<string, unknown>[]).map((ship) => ({ ...ship, voyage: null }))
+    s.seed = Math.floor(Math.random() * 2 ** 31)
+    s.takenOffers = []
+    s.log = []
+    s.ledger = { revenue: 0, fuel: 0, harbour: 0, canal: 0, running: 0 }
+  }
+  return s as unknown as GameState
 }
 
 function validate(s: GameState) {
@@ -46,7 +54,9 @@ function validate(s: GameState) {
     typeof s.homePortId === 'string' &&
     typeof s.day === 'number' &&
     typeof s.money === 'number' &&
-    Array.isArray(s.ships)
+    typeof s.seed === 'number' &&
+    Array.isArray(s.ships) &&
+    Array.isArray(s.log)
   if (!ok) throw new Error('Tallennus on vioittunut.')
 }
 

@@ -1,0 +1,88 @@
+import { CARGO_TYPES, type CargoType } from '../data/cargoTypes'
+import { PORTS } from '../data/ports'
+import { getRoute } from '../data/routes'
+import type { CargoClass, ShipType } from '../data/shipTypes'
+import { inRange, MARKET_WEEK } from './economy'
+import { hashString, rng } from './rng'
+import type { Contract, GameState, OwnedShip } from './types'
+
+/** Which cargo a ship of each class can load. */
+const LOADS: Record<CargoClass, CargoClass[]> = {
+  general: ['general', 'container'],
+  container: ['container'],
+  bulk: ['bulk'],
+  liquid: ['liquid'],
+}
+
+/** Typical lot sizes in tonnes. */
+const LOT: Record<CargoClass, [number, number]> = {
+  general: [1500, 6000],
+  container: [1500, 16000],
+  bulk: [8000, 30000],
+  liquid: [8000, 40000],
+}
+
+/** Share of offers per cargo class (small ships should always find work). */
+const CLASS_WEIGHT: Record<CargoClass, number> = { general: 4, container: 2, bulk: 2, liquid: 2 }
+
+export function canLoad(ship: ShipType, cargo: CargoType): boolean {
+  return LOADS[ship.cargoClass].includes(cargo.cargoClass)
+}
+
+export function getCargo(id: string): CargoType {
+  const c = CARGO_TYPES.find((c) => c.id === id)
+  if (!c) throw new Error(`Tuntematon lasti: ${id}`)
+  return c
+}
+
+export function marketWeek(day: number): number {
+  return Math.floor(day / MARKET_WEEK)
+}
+
+/** Day the current market week ends (offers refresh then). */
+export function nextMarketDay(day: number): number {
+  return (marketWeek(day) + 1) * MARKET_WEEK
+}
+
+/** Freight rate in dollars for a lot. Longer hauls are cheaper per mile. */
+export function freightPay(cargo: CargoType, tonnes: number, nm: number, factor = 1): number {
+  const perTonne = cargo.ratePer1000nm * 1.6 * Math.pow(nm / 1000, 0.85) + 6
+  return Math.round((tonnes * perTonne * factor) / 100) * 100
+}
+
+/** The offers on the board at a port this week, minus ones already taken. */
+export function portOffers(state: GameState, portId: string): Contract[] {
+  const week = marketWeek(state.day)
+  const port = PORTS.find((p) => p.id === portId)!
+  const r = rng(hashString(`${state.seed}:market:${portId}:${week}`))
+  const count = 3 + port.size * 3
+  const startDay = week * MARKET_WEEK
+  const offers: Contract[] = []
+  const dests = PORTS.filter((p) => p.id !== portId)
+
+  // Every board starts with two regional general-cargo jobs, so a small ship always finds work.
+  const regional = dests.filter((p) => getRoute(portId, p.id).nm < 5000)
+  for (let i = 0; i < count; i++) {
+    const starter = i < 2 && regional.length > 0
+    const cls = starter ? 'general' : r.pick(Object.keys(CLASS_WEIGHT) as CargoClass[], (c) => CLASS_WEIGHT[c])
+    const cargo = r.pick(CARGO_TYPES.filter((c) => c.cargoClass === cls))
+    const dest = r.pick(starter ? regional : dests, (p) => p.size * p.size)
+    const nm = getRoute(portId, dest.id).nm
+    const [lo, hi] = LOT[cls]
+    const tonnes = Math.round(r.range(lo, hi) / 100) * 100
+    const pay = freightPay(cargo, tonnes, nm, r.range(0.85, 1.25) * (0.9 + port.size * 0.05))
+    // Enough time for a 12-knot ship plus slack.
+    const deadlineDay = startDay + Math.ceil(nm / (12 * 24) * 1.4) + r.int(6, 14)
+    offers.push({ id: `${portId}-${week}-${i}`, cargoId: cargo.id, tonnes, from: portId, to: dest.id, pay, deadlineDay })
+  }
+  const taken = new Set(state.takenOffers)
+  return offers.filter((o) => !taken.has(o.id)).sort((a, b) => b.pay - a.pay)
+}
+
+export function offerFits(ship: OwnedShip, t: ShipType, o: Contract): string | null {
+  if (!canLoad(t, getCargo(o.cargoId))) return 'Väärä laivatyyppi'
+  if (o.tonnes > t.capacity) return 'Ei mahdu'
+  if (ship.voyage) return 'Laiva on merellä'
+  if (!inRange(t, getRoute(o.from, o.to).nm)) return 'Liian pitkä matka'
+  return null
+}
