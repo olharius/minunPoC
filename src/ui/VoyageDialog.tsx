@@ -1,6 +1,6 @@
 import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
-import { planVoyage, voyageFuelValue } from '../game/economy'
+import { latePenalty, penaltyPerDay, planVoyage, voyageFuelValue } from '../game/economy'
 import { fmtCost, fmtDate, fmtMoney, fmtNum } from '../game/format'
 import { getCargo } from '../game/market'
 import { currentDate } from '../game/newGame'
@@ -23,7 +23,8 @@ export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel 
   const dateOf = (day: number) => fmtDate(currentDate({ ...state, day }))
   const late = contract ? arrivalDay - contract.deadlineDay : 0
   const revenue = contract ? contract.pay : 0
-  const costs = burned + plan.runningCost + plan.harbourFee + plan.canalTolls
+  const penalty = contract ? latePenalty(contract, late) : 0
+  const costs = burned + plan.runningCost + plan.harbourFee + plan.canalTolls + penalty
   const profit = revenue - costs
   const cashNeeded = plan.fuelCost + plan.canalTolls
 
@@ -34,6 +35,7 @@ export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel 
           {getPort(plan.from).name} → {getPort(to).name}
         </h2>
         <p className="muted">
+          {contract?.express && <span className="badge express">Express</span>}
           {ship.name} · {contract ? `${fmtNum(contract.tonnes)} t ${getCargo(contract.cargoId).name.toLowerCase()}` : 'ilman lastia'}
         </p>
         <dl className="facts">
@@ -54,8 +56,10 @@ export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel 
               <dt>Määräaika</dt>
               <dd className={late > 0 ? 'neg' : ''}>
                 {dateOf(contract.deadlineDay)}
-                {late > 0 && ` (myöhässä ${late} pv, maksu pienenee)`}
+                {late > 0 ? ` (myöhässä ${late} pv)` : ` (pelivaraa ${-late} pv)`}
               </dd>
+              <dt>Sopimussakko</dt>
+              <dd>{fmtMoney(penaltyPerDay(contract))} / myöhästetty päivä</dd>
             </>
           )}
         </dl>
@@ -80,9 +84,16 @@ export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel 
               <dd>{fmtCost(plan.canalTolls)}</dd>
             </>
           )}
+          {contract && late > 0 && (
+            <>
+              <dt>Sopimussakko ({late} pv)</dt>
+              <dd className="neg">{fmtCost(penalty)}</dd>
+            </>
+          )}
           <dt className="total">Tulos</dt>
           <dd className={`total ${profit < 0 ? 'neg' : 'pos'}`}>{fmtMoney(profit)}</dd>
         </dl>
+        {contract && late <= 0 && late >= -3 && <p className="hint">Aikataulu on tiukka: myrsky tai konevika voi myöhästyttää toimitusta, ja jokainen myöhästetty päivä maksaa {fmtMoney(penaltyPerDay(contract))}.</p>}
         {plan.fuelToBuy > 0 && (
           <p className="hint">
             Laivaan tankataan ennen lähtöä {fmtNum(plan.fuelToBuy)} t polttoainetta ({fmtMoney(plan.fuelCost)}).

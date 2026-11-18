@@ -13,7 +13,7 @@ const STEPS = [500_000, 2_000_000, 10_000_000]
 
 export function FinancePanel({ state, onBorrow, onRepay }: Props) {
   const l = state.ledger
-  const costs = l.fuel + l.harbour + l.canal + l.running + l.repairs + l.interest + l.incidents
+  const costs = l.fuel + l.harbour + l.canal + l.running + l.repairs + l.interest + l.incidents + (l.penalties ?? 0)
   const fleet = fleetValue(state)
   const avail = creditAvailable(state)
   const short = (n: number) => (n >= 1e6 ? `${n / 1e6} M` : `${n / 1000} k`)
@@ -80,6 +80,8 @@ export function FinancePanel({ state, onBorrow, onRepay }: Props) {
         <dd>{fmtCost(l.interest)}</dd>
         <dt>Välikohtaukset merellä</dt>
         <dd>{fmtCost(l.incidents)}</dd>
+        <dt>Sopimussakot</dt>
+        <dd>{fmtCost(l.penalties ?? 0)}</dd>
         <dt className="total">Tulos</dt>
         <dd className={`total ${l.revenue - costs < 0 ? 'neg' : 'pos'}`}>{fmtMoney(l.revenue - costs)}</dd>
       </dl>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { PORTS, getPort } from '../../data/ports'
 import { getRoute } from '../../data/routes'
 import { getShipType } from '../../data/shipTypes'
-import { fuelPrice, harbourFee, inRange } from '../../game/economy'
+import { fuelPrice, harbourFee, inRange, penaltyPerDay } from '../../game/economy'
 import { canRepairAt, repairQuote, sellsNewShips, shipValue, usedListings } from '../../game/fleet'
 import { fmtDate, fmtMoney, fmtNum } from '../../game/format'
 import { getCargo, nextMarketDay, offerFits, portOffers } from '../../game/market'
@@ -151,9 +151,10 @@ function FreightTab({ state, portId, ship, onChooseOffer, onChooseEmpty, onPrevi
           const cargo = getCargo(o.cargoId)
           const nm = getRoute(portId, o.to).nm
           return (
-            <li key={o.id} className={why ? 'offer no-fit' : 'offer'} onMouseEnter={() => onPreview(o.to)} onMouseLeave={() => onPreview(null)}>
+            <li key={o.id} className={`offer${o.express ? ' express' : ''}${why ? ' no-fit' : ''}`} onMouseEnter={() => onPreview(o.to)} onMouseLeave={() => onPreview(null)}>
               <div className="offer-top">
                 <span className="offer-cargo">
+                  {o.express && <span className="badge express">Express</span>}
                   {cargo.name} · {fmtNum(o.tonnes)} t
                 </span>
                 <span className="offer-pay">{fmtMoney(o.pay)}</span>
@@ -161,6 +162,7 @@ function FreightTab({ state, portId, ship, onChooseOffer, onChooseEmpty, onPrevi
               <div className="offer-mid">
                 → <strong>{getPort(o.to).name}</strong> · {fmtNum(nm)} mpk · perillä viimeistään {dateOf(o.deadlineDay)}
               </div>
+              <div className="offer-mid">Sopimussakko {fmtMoney(penaltyPerDay(o))} / myöhästetty päivä</div>
               {ship && (
                 <div className="offer-actions">
                   {why ? (
