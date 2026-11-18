@@ -1,14 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { getRoute } from '../data/routes'
-import { pirateZoneAt, resolveEvent, shiftArrival, shipPosition } from './events'
+import { eventOutlook, pirateZoneAt, resolveEvent, shiftArrival, shipPosition } from './events'
 import { portOffers } from './market'
 import { newGame } from './newGame'
 import { cargoFactor, monthNews, portOnStrike } from './news'
 import { parseSave } from './save'
+import { activeHold, voyageProgress } from './voyage'
 import { advanceDay, applyDocking, depart } from './sim'
 import type { GameState } from './types'
 
 const sailing = (seed = 3): GameState => depart({ ...newGame('T', 'rotterdam', 'A'), seed }, 's1', 'singapore')
+
+const OPTS = { engine: ['self', 'service'], pirates: ['guards', 'risk'], storm: ['around', 'through'] }
+function withEvent(s: GameState, kind: 'engine' | 'pirates' | 'storm'): GameState {
+  return {
+    ...s,
+    pendingEvent: { kind, shipId: s.ships[0].id, day: s.day, title: '', text: '', options: OPTS[kind].map((id) => ({ id, label: id, detail: '' })) },
+  }
+}
+/** A day without new events, so a test sees only the effect it set up. */
+function calmDay(s: GameState): GameState {
+  const v = s.ships[0].voyage!
+  return advanceDay({ ...s, ships: [{ ...s.ships[0], voyage: { ...v, events: ['storm', 'engine', 'pirates'] } }, ...s.ships.slice(1)] })
+}
 
 function untilEvent(s: GameState, max = 60): GameState {
   for (let i = 0; i < max && !s.pendingEvent; i++) s = advanceDay(s)
@@ -39,6 +53,83 @@ describe('events at sea', () => {
       return
     }
     throw new Error('no storm found')
+  })
+
+  it('engine repairs stop the ship for the given days, then it sails on', () => {
+    for (const [option, days] of [
+      ['self', 3],
+      ['service', 1],
+    ] as const) {
+      let s = sailing()
+      for (let i = 0; i < 5; i++) s = advanceDay({ ...s, pendingEvent: null })
+      s = withEvent(s, 'engine')
+      const departDay = s.ships[0].voyage!.departDay
+      const arrive = s.ships[0].voyage!.arriveDay
+      const pos = shipPosition(s.ships[0], s.day)
+      s = resolveEvent(s, option)
+      expect(s.ships[0].voyage!.arriveDay).toBeCloseTo(arrive + days)
+      expect(s.ships[0].voyage!.departDay).toBe(departDay)
+      for (let i = 0; i < days; i++) {
+        const fuel = s.ships[0].fuel
+        s = calmDay(s)
+        const p = shipPosition(s.ships[0], s.day)
+        // Standing still: no movement, no fuel burnt.
+        expect(p[0]).toBeCloseTo(pos[0], 3)
+        expect(p[1]).toBeCloseTo(pos[1], 3)
+        expect(s.ships[0].fuel).toBe(fuel)
+      }
+      s = calmDay(s)
+      const moved = shipPosition(s.ships[0], s.day)
+      expect(Math.abs(moved[0] - pos[0]) + Math.abs(moved[1] - pos[1])).toBeGreaterThan(0.1)
+    }
+  })
+
+  it('a ransom stops the ship for four days', () => {
+    let s = sailing()
+    for (let i = 0; i < 5; i++) s = advanceDay({ ...s, pendingEvent: null })
+    // Find a seed where the pirates strike.
+    for (let seed = 0; seed < 200; seed++) {
+      const t = resolveEvent(withEvent({ ...s, seed }, 'pirates'), 'risk')
+      const v = t.ships[0].voyage!
+      if (!v.holds?.length) continue
+      expect(v.holds[0]).toMatchObject({ from: t.day, until: t.day + 4, reason: 'pirates' })
+      expect(activeHold(v, t.day + 3.5)).not.toBeNull()
+      expect(activeHold(v, t.day + 4)).toBeNull()
+      expect(t.money).toBeLessThan(s.money)
+      return
+    }
+    throw new Error('pirates never struck')
+  })
+
+  it('progress keeps working for voyages from older saves', () => {
+    const s = sailing()
+    const v = s.ships[0].voyage!
+    expect(v.anchor).toBeUndefined()
+    expect(voyageProgress(v, v.departDay)).toBe(0)
+    expect(voyageProgress(v, (v.departDay + v.arriveDay) / 2)).toBeCloseTo(0.5)
+    expect(voyageProgress(v, v.arriveDay)).toBe(1)
+  })
+
+  it('tells how each choice changes the schedule and the penalty', () => {
+    let s = sailing()
+    const v = s.ships[0].voyage!
+    const arrive = Math.ceil(v.arriveDay)
+    // A tight Express job: due exactly on the current arrival day.
+    v.contract = { id: 'c', cargoId: 'grain', tonnes: 1000, from: v.from, to: v.to, pay: 100000, deadlineDay: arrive, express: true }
+    s = withEvent(s, 'engine')
+    const look = eventOutlook(s)!
+    const self = look.options.find((o) => o.optionId === 'self')!.sure
+    const service = look.options.find((o) => o.optionId === 'service')!.sure
+    expect(self).toMatchObject({ delay: 3, arriveDay: arrive + 3, lateDays: 3, penalty: 30000 })
+    expect(service).toMatchObject({ delay: 1, arriveDay: arrive + 1, lateDays: 1, penalty: 10000 })
+    expect(service.cost).toBeGreaterThan(0)
+    // The forecast matches what really happens.
+    const after = resolveEvent(s, 'self')
+    expect(Math.ceil(after.ships[0].voyage!.arriveDay)).toBe(self.arriveDay)
+
+    const pir = eventOutlook(withEvent(s, 'pirates'))!.options.find((o) => o.optionId === 'risk')!
+    expect(pir.sure.lateDays).toBe(0)
+    expect(pir.risk).toMatchObject({ chance: 0.25, outcome: { delay: 4, lateDays: 4, penalty: 40000 } })
   })
 
   it('knows the pirate zones', () => {

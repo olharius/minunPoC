@@ -11,6 +11,7 @@ import { buyNewShip, buyUsedShip, sellShip, shipValue, startRepair, usedListings
 import { getShipType } from '../data/shipTypes'
 import { BuyDialog } from './BuyDialog'
 import { DockingGame } from './DockingGame'
+import { EventDialog } from './EventDialog'
 import { resolveEvent } from '../game/events'
 import { currentNews } from '../game/news'
 import { applyDocking } from '../game/sim'
@@ -290,23 +291,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
         />
       )}
 
-      {state.pendingEvent && !state.bankrupt && (
-        <div className="modal-back">
-          <div className="modal" role="alertdialog" aria-modal="true">
-            <h2>{state.pendingEvent.title}</h2>
-            <p>{state.pendingEvent.text}</p>
-            <div className="event-options">
-              {state.pendingEvent.options.map((o) => (
-                <button key={o.id} onClick={() => act(() => resolveEvent(state, o.id))}>
-                  <strong>{o.label}</strong>
-                  <br />
-                  <small>{o.detail}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {state.pendingEvent && !state.bankrupt && <EventDialog state={state} onChoose={(id) => act(() => resolveEvent(state, id))} />}
 
       {dockQueue.length > 0 && !state.pendingEvent && (() => {
         const ship = state.ships.find((s) => s.id === dockQueue[0])
