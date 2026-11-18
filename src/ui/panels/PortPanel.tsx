@@ -8,6 +8,7 @@ import { fmtDate, fmtMoney, fmtNum } from '../../game/format'
 import { getCargo, nextMarketDay, offerFits, portOffers } from '../../game/market'
 import { currentDate } from '../../game/newGame'
 import type { Contract, GameState } from '../../game/types'
+import { portOnStrike } from '../../game/news'
 import { ShipyardTab } from './ShipyardTab'
 
 export interface PortActions {
@@ -59,12 +60,14 @@ export function PortPanel(props: Props) {
         {t && (
           <>
             <dt>Satamamaksu</dt>
-            <dd>{fmtMoney(harbourFee(p.id, t))}</dd>
+            <dd>{fmtMoney(harbourFee(p.id, t, state))}</dd>
           </>
         )}
         <dt>Palvelut</dt>
         <dd>{[sellsNewShips(portId) && 'uudet laivat', hasYard && 'käytetyt laivat', canRepairAt(portId) && 'korjaustelakka'].filter(Boolean).join(', ') || '–'}</dd>
       </dl>
+
+      {portOnStrike(state, portId) && <div className="news">📰 Satamatyöläiset ovat lakossa tämän kuun: ei uusia rahteja, ja satamamaksut ovat kaksinkertaiset.</div>}
 
       {here.length > 0 && ship && t && (
         <div className="ship-in-port">

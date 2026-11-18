@@ -10,6 +10,10 @@ import { borrow, repay } from '../game/bank'
 import { buyNewShip, buyUsedShip, sellShip, shipValue, startRepair, usedListings } from '../game/fleet'
 import { getShipType } from '../data/shipTypes'
 import { BuyDialog } from './BuyDialog'
+import { DockingGame } from './DockingGame'
+import { resolveEvent } from '../game/events'
+import { currentNews } from '../game/news'
+import { applyDocking } from '../game/sim'
 import { FinancePanel } from './panels/FinancePanel'
 import { FleetPanel } from './panels/FleetPanel'
 import { LogList } from './panels/LogList'
@@ -35,6 +39,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
   const [pending, setPending] = useState<Pending>(null)
   const [purchase, setPurchase] = useState<Purchase>(null)
   const [rootTab, setRootTab] = useState<RootTab>('fleet')
+  const [dockQueue, setDockQueue] = useState<string[]>([])
   const [previewTo, setPreviewTo] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [speed, setSpeed] = useState(0)
@@ -54,6 +59,16 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
     const next = advanceDay(state)
     const docked = arrivals(state, next)
     onChange(next)
+    if (next.pendingEvent && !state.pendingEvent) {
+      setRunning(false)
+      clock.reset()
+      setSelection({ kind: 'ship', id: next.pendingEvent.shipId })
+    }
+    if (docked.length && next.settings.manualDocking) {
+      setDockQueue((q) => [...q, ...docked.map((s) => s.id)])
+      setRunning(false)
+      clock.reset()
+    }
     if (docked.length) {
       const names = docked.map((s) => `${s.name} saapui satamaan ${getPort(s.portId!).name}`).join('. ')
       flash(names + '.')
@@ -64,7 +79,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
       }
     }
   }
-  const clock = useClock(running && !pending && !purchase && !state.bankrupt, speed, step)
+  const clock = useClock(running && !pending && !purchase && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0, speed, step)
   const time = state.day + (running ? clock.fraction : 0)
 
   const act = (fn: () => GameState) => {
@@ -139,6 +154,12 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
               <button onClick={() => setPauseOnArrival((p) => !p)}>
                 {pauseOnArrival ? '☑' : '☐'} Pysäytä aika, kun laiva saapuu
               </button>
+              <button onClick={() => onChange({ ...state, settings: { ...state.settings, manualDocking: !state.settings.manualDocking } })}>
+                {state.settings.manualDocking ? '☑' : '☐'} Ohjaa laivat satamaan itse (minipeli)
+              </button>
+              <button onClick={() => onChange({ ...state, settings: { ...state.settings, autoEvents: !state.settings.autoEvents } })}>
+                {state.settings.autoEvents ? '☑' : '☐'} Kapteenit päättävät merellä itse (varovaisesti)
+              </button>
               <button onClick={onQuit}>Päävalikkoon</button>
             </div>
           )}
@@ -194,6 +215,13 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
             />
           ) : (
             <>
+              {currentNews(state).length > 0 && (
+                <div className="news" aria-label="Uutiset">
+                  {currentNews(state).map((n) => (
+                    <div key={n.text}>📰 {n.text}</div>
+                  ))}
+                </div>
+              )}
               <div className="tabs" role="tablist">
                 {(
                   [
@@ -261,6 +289,43 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
           }}
         />
       )}
+
+      {state.pendingEvent && !state.bankrupt && (
+        <div className="modal-back">
+          <div className="modal" role="alertdialog" aria-modal="true">
+            <h2>{state.pendingEvent.title}</h2>
+            <p>{state.pendingEvent.text}</p>
+            <div className="event-options">
+              {state.pendingEvent.options.map((o) => (
+                <button key={o.id} onClick={() => act(() => resolveEvent(state, o.id))}>
+                  <strong>{o.label}</strong>
+                  <br />
+                  <small>{o.detail}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dockQueue.length > 0 && !state.pendingEvent && (() => {
+        const ship = state.ships.find((s) => s.id === dockQueue[0])
+        if (!ship?.portId) {
+          setTimeout(() => setDockQueue((q) => q.slice(1)))
+          return null
+        }
+        return (
+          <DockingGame
+            key={`${ship.id}-${state.day}`}
+            portId={ship.portId}
+            shipName={ship.name}
+            onDone={(r) => {
+              act(() => applyDocking(state, ship.id, r))
+              setDockQueue((q) => q.slice(1))
+            }}
+          />
+        )
+      })()}
 
       {state.bankrupt && (
         <div className="modal-back">
