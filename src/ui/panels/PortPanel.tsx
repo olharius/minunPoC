@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PORTS, getPort } from '../../data/ports'
 import { getRoute } from '../../data/routes'
 import { getShipType } from '../../data/shipTypes'
+import { mainExports, mainImports } from '../../data/trade'
 import { fuelPrice, harbourFee, inRange, penaltyPerDay } from '../../game/economy'
 import { canRepairAt, repairQuote, sellsNewShips, shipValue, usedListings } from '../../game/fleet'
 import { fmtDay, fmtMoney, fmtNum } from '../../game/format'
@@ -42,6 +43,7 @@ export function PortPanel(props: Props) {
   const sizeLabel = ['', 'Pieni satama', 'Keskikokoinen satama', 'Suursatama'][p.size]
   const price = fuelPrice(state, portId)
   const hasYard = sellsNewShips(portId) || usedListings(state, portId).length > 0
+  const goods = (ids: string[]) => ids.map((id) => getCargo(id).name.toLowerCase()).join(', ') || 'sekalaista rahtia'
 
   return (
     <div>
@@ -64,6 +66,10 @@ export function PortPanel(props: Props) {
             <dd>{fmtMoney(harbourFee(p.id, t, state))}</dd>
           </>
         )}
+        <dt>Vienti</dt>
+        <dd>{goods(mainExports(portId))}</dd>
+        <dt>Tuonti</dt>
+        <dd>{goods(mainImports(portId))}</dd>
         <dt>Palvelut</dt>
         <dd>{[sellsNewShips(portId) && 'uudet laivat', hasYard && 'käytetyt laivat', canRepairAt(portId) && 'korjaustelakka'].filter(Boolean).join(', ') || '–'}</dd>
       </dl>

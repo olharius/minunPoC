@@ -20,4 +20,9 @@ export const CARGO_TYPES: CargoType[] = [
   { id: 'machinery', name: 'Koneet', cargoClass: 'general', ratePer1000nm: 11 },
   { id: 'timber', name: 'Sahatavara', cargoClass: 'general', ratePer1000nm: 6 },
   { id: 'paper', name: 'Paperi', cargoClass: 'general', ratePer1000nm: 7 },
+  { id: 'crude-oil', name: 'Raakaöljy', cargoClass: 'liquid', ratePer1000nm: 3 },
+  { id: 'soybeans', name: 'Soijapavut', cargoClass: 'bulk', ratePer1000nm: 4 },
+  { id: 'steel', name: 'Teräs', cargoClass: 'general', ratePer1000nm: 8 },
+  { id: 'cars', name: 'Autot', cargoClass: 'general', ratePer1000nm: 10 },
+  { id: 'general-goods', name: 'Kappaletavara', cargoClass: 'general', ratePer1000nm: 8 },
 ]
