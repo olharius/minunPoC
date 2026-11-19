@@ -1,7 +1,8 @@
 import { CARGO_TYPES, type CargoType } from '../data/cargoTypes'
-import { getPort, PORTS } from '../data/ports'
+import { getPort, PORTS, type Port } from '../data/ports'
 import { getRoute } from '../data/routes'
 import type { CargoClass, ShipType } from '../data/shipTypes'
+import { tradeOf } from '../data/trade'
 import { MARKET_WEEK, monthOf } from './calendar'
 import { inRange, penaltyPerDay } from './economy'
 import { cargoFactor, portOnStrike } from './news'
@@ -29,6 +30,36 @@ const EXPRESS_SHARE = 0.2
 
 /** Share of offers per cargo class (small ships should always find work). */
 const CLASS_WEIGHT: Record<CargoClass, number> = { general: 3, container: 2.5, bulk: 2.5, liquid: 2 }
+
+/** Bulk and tanker cargo is rare from ports that do not export it. */
+const NON_EXPORT_SPECIAL = 0.4
+
+/** Ordinary mixed cargo, offered everywhere a bit more than other goods. */
+const BASIC_CARGO = 'general-goods'
+const BASIC_WEIGHT = 2
+
+/** A port that exports a cargo itself rarely takes it in. */
+const SELF_EXPORT_DEST = 0.25
+
+const classSize = new Map<CargoClass, number>()
+for (const c of CARGO_TYPES) classSize.set(c.cargoClass, (classSize.get(c.cargoClass) ?? 0) + 1)
+
+/** How likely a cargo is to be offered at a port, from what the port exports. */
+export function cargoWeight(portId: string, cargo: CargoType): number {
+  const listed = tradeOf(portId).exports[cargo.id]
+  const special = cargo.cargoClass === 'bulk' || cargo.cargoClass === 'liquid'
+  let mult = cargo.id === BASIC_CARGO ? BASIC_WEIGHT : (listed ?? (special ? NON_EXPORT_SPECIAL : 1))
+  // Every big port ships boxes, so container hubs get only a gentle boost.
+  if (cargo.cargoClass === 'container' && listed) mult = 1 + (listed - 1) / 3
+  return (CLASS_WEIGHT[cargo.cargoClass] / classSize.get(cargo.cargoClass)!) * mult
+}
+
+/** How likely a port is to be the destination of a cargo, from what it imports. */
+export function destWeight(dest: Port, cargoId: string): number {
+  const t = tradeOf(dest.id)
+  const self = (t.exports[cargoId] ?? 0) >= 3 ? SELF_EXPORT_DEST : 1
+  return dest.size * dest.size * (t.imports[cargoId] ?? 1) * self
+}
 
 export function canLoad(ship: ShipType, cargo: CargoType): boolean {
   return LOADS[ship.cargoClass].includes(cargo.cargoClass)
@@ -95,12 +126,16 @@ function drawBoard(state: Pick<GameState, 'seed' | 'day'>, portId: string): read
   const dests = PORTS.filter((p) => p.id !== portId)
 
   // Every board starts with two regional general-cargo jobs, so a small ship always finds work.
+  // Which cargo turns up follows the port's exports, where it goes the
+  // destinations' imports (see data/trade.ts).
   const regional = dests.filter((p) => getRoute(portId, p.id).nm < 5000)
+  const general = CARGO_TYPES.filter((c) => c.cargoClass === 'general')
+  const weight = (c: CargoType) => cargoWeight(portId, c)
   for (let i = 0; i < count; i++) {
     const starter = i < 2 && regional.length > 0
-    const cls = starter ? 'general' : r.pick(Object.keys(CLASS_WEIGHT) as CargoClass[], (c) => CLASS_WEIGHT[c])
-    const cargo = r.pick(CARGO_TYPES.filter((c) => c.cargoClass === cls))
-    const dest = r.pick(starter ? regional : dests, (p) => p.size * p.size)
+    const cargo = r.pick(starter ? general : CARGO_TYPES, weight)
+    const cls = cargo.cargoClass
+    const dest = r.pick(starter ? regional : dests, (p) => destWeight(p, cargo.id))
     const nm = getRoute(portId, dest.id).nm
     const [lo, hi] = starter ? [1500, 6000] : LOT[cls]
     // Skewed towards smaller lots; big lots are rarer.

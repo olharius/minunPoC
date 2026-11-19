@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { newGame } from './newGame'
 import { getCargo, portOffers } from './market'
 import { monthNews } from './news'
-import type { GameState } from './types'
+import { PORTS } from '../data/ports'
+import { TRADE } from '../data/trade'
+import type { Contract, GameState } from './types'
 
 const game = (day = 10): GameState => ({ ...newGame('Testi', 'rotterdam', 'Aallotar'), seed: 11, day })
 
@@ -43,5 +45,41 @@ describe('getCargo', () => {
   it('finds a cargo by id and rejects unknown ones', () => {
     expect(getCargo('grain').name).toBe('Vilja')
     expect(() => getCargo('kultaa')).toThrow()
+  })
+})
+
+describe('trade-based offers', () => {
+  // Many weeks of boards from one port, to see what it typically ships.
+  const sample = (portId: string, weeks = 60): Contract[] =>
+    Array.from({ length: weeks }, (_, w) => portOffers({ ...game(w * 7 + 1), seed: 3 }, portId)).flat()
+  const share = (offers: Contract[], ids: string[]) => offers.filter((o) => ids.includes(o.cargoId)).length / offers.length
+
+  it('has a trade profile for every port, naming only real cargo', () => {
+    for (const p of PORTS) {
+      const t = TRADE[p.id]
+      expect(t, p.id).toBeDefined()
+      for (const id of [...Object.keys(t.exports), ...Object.keys(t.imports)]) expect(() => getCargo(id)).not.toThrow()
+    }
+  })
+
+  it('offers more oil from oil countries', () => {
+    expect(share(sample('dubai'), ['crude-oil'])).toBeGreaterThan(3 * share(sample('helsinki'), ['crude-oil']))
+  })
+
+  it('offers more grain from grain countries', () => {
+    expect(share(sample('buenosaires'), ['grain', 'soybeans'])).toBeGreaterThan(3 * share(sample('lagos'), ['grain', 'soybeans']))
+  })
+
+  it('still offers general cargo everywhere', () => {
+    for (const p of PORTS) {
+      const general = sample(p.id, 20).filter((o) => getCargo(o.cargoId).cargoClass === 'general')
+      expect(general.length, p.id).toBeGreaterThan(20)
+    }
+  })
+
+  it('sends cargo mostly to ports that import it', () => {
+    const ore = sample('sydney', 120).filter((o) => o.cargoId === 'iron-ore')
+    const toImporters = ore.filter((o) => ['shanghai', 'yokohama', 'rotterdam', 'hamburg', 'genoa'].includes(o.to)).length
+    expect(toImporters / ore.length).toBeGreaterThan(0.5)
   })
 })

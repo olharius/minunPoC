@@ -22,6 +22,11 @@ const BOOM_TEXT: Record<string, string> = {
   machinery: 'Teollisuuden investoinnit kasvavat: konerahdit kallistuvat.',
   timber: 'Rakennusbuumi lisää sahatavaran kysyntää.',
   paper: 'Painotalojen kysyntä kasvaa: paperirahdit nousevat.',
+  'crude-oil': 'Jalostamot lisäävät tuotantoa: raakaöljyn rahtihinnat nousevat.',
+  soybeans: 'Rehun kysyntä kasvaa: soijapapujen rahtihinnat nousevat.',
+  steel: 'Infrastruktuurihankkeet lisäävät teräksen kysyntää.',
+  cars: 'Automyynti vilkastuu: autorahdit kallistuvat.',
+  'general-goods': 'Kauppa vilkastuu: kappaletavaran rahdit nousevat.',
 }
 
 // The headlines are asked for many times a day (every freight offer and
