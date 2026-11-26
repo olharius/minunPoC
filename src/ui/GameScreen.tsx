@@ -23,6 +23,8 @@ import { PortPanel } from './panels/PortPanel'
 import { ShipPanel } from './panels/ShipPanel'
 import { SPEEDS, useClock } from './useClock'
 import { VoyageDialog } from './VoyageDialog'
+import { MilestoneDialog, YearReviewDialog } from './AwardDialogs'
+import { GoalsPanel } from './panels/GoalsPanel'
 import { WorldMap } from './WorldMap'
 
 interface Props {
@@ -34,7 +36,7 @@ interface Props {
 type Selection = { kind: 'port'; id: string; shipId?: string } | { kind: 'ship'; id: string } | null
 type Pending = { shipId: string; to: string; contract: Contract | null } | null
 type Purchase = { portId: string; typeId: string; price: number; condition: number; listingId?: string; name?: string } | null
-type RootTab = 'fleet' | 'finance' | 'log'
+type RootTab = 'fleet' | 'goals' | 'finance' | 'log'
 
 export function GameScreen({ state, onChange, onQuit }: Props) {
   const [selection, setSelection] = useState<Selection>(null)
@@ -49,6 +51,8 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
   const [idleQueue, setIdleQueue] = useState<IdleNotice[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [awards, setAwards] = useState<string[]>([])
+  const [yearShown, setYearShown] = useState<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const noticeTimer = useRef(0)
 
@@ -72,6 +76,14 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
       setRunning(false)
       clock.reset()
     }
+    const reached = next.milestones.filter((m) => !state.milestones.some((o) => o.id === m.id)).map((m) => m.id)
+    const closedYear = next.yearReports.length > state.yearReports.length ? next.yearReports[next.yearReports.length - 1].year : null
+    if (reached.length || closedYear !== null) {
+      if (reached.length) setAwards((a) => [...a, ...reached])
+      if (closedYear !== null) setYearShown(closedYear)
+      setRunning(false)
+      clock.reset()
+    }
     const idle = newlyIdle(state, next)
     if (idle.length && pauseOnIdle) {
       setIdleQueue((q) => [...q, ...idle.filter((n) => !q.some((m) => m.shipId === n.shipId && m.reason === n.reason))])
@@ -81,7 +93,11 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
       flash(noticeLines(next, idle).map((l) => l.text).join(' '))
     }
   }
-  const clock = useClock(running && !pending && !purchase && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0 && idleQueue.length === 0, speed, step)
+  const clock = useClock(
+    running && !pending && !purchase && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0 && idleQueue.length === 0 && awards.length === 0 && yearShown === null,
+    speed,
+    step,
+  )
   const time = state.day + (running ? clock.fraction : 0)
 
   const act = (fn: () => GameState) => {
@@ -229,6 +245,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
                 {(
                   [
                     ['fleet', 'Laivasto'],
+                    ['goals', 'Tavoitteet'],
                     ['finance', 'Talous'],
                     ['log', 'Tapahtumat'],
                   ] as const
@@ -247,7 +264,10 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
                   }}
                 />
               )}
-              {rootTab === 'finance' && <FinancePanel state={state} onBorrow={(a) => act(() => borrow(state, a))} onRepay={(a) => act(() => repay(state, a))} />}
+              {rootTab === 'goals' && <GoalsPanel state={state} />}
+              {rootTab === 'finance' && (
+                <FinancePanel state={state} onBorrow={(a) => act(() => borrow(state, a))} onRepay={(a) => act(() => repay(state, a))} onShowYear={setYearShown} />
+              )}
               {rootTab === 'log' && <LogList state={state} limit={80} />}
             </>
           )}
@@ -261,11 +281,11 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
           to={pending.to}
           contract={pending.contract}
           onCancel={() => setPending(null)}
-          onConfirm={() => {
+          onConfirm={(pace) => {
             const p = pending
             setPending(null)
             setPreviewTo(null)
-            act(() => (p.contract ? acceptOffer(state, p.shipId, p.contract.id) : depart(state, p.shipId, p.to)))
+            act(() => (p.contract ? acceptOffer(state, p.shipId, p.contract.id, pace) : depart(state, p.shipId, p.to, null, pace)))
             setSelection({ kind: 'ship', id: p.shipId })
             if (!running) flash('Laiva lähti. Käynnistä aika ▶-painikkeesta.')
           }}
@@ -314,7 +334,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
         )
       })()}
 
-      {idleQueue.length > 0 && !state.pendingEvent && dockQueue.length === 0 && !state.bankrupt && (() => {
+      {idleQueue.length > 0 && !state.pendingEvent && dockQueue.length === 0 && awards.length === 0 && yearShown === null && !state.bankrupt && (() => {
         const items = idleQueue.filter((n) => state.ships.some((s) => s.id === n.shipId && s.portId))
         const close = () => setIdleQueue([])
         const show = (portId: string, shipId: string) => {
@@ -354,6 +374,20 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
           </div>
         )
       })()}
+
+      {yearShown !== null && !state.pendingEvent && <YearReviewDialog state={state} year={yearShown} onClose={() => setYearShown(null)} />}
+
+      {awards.length > 0 && yearShown === null && !state.pendingEvent && (
+        <MilestoneDialog
+          ids={awards}
+          onClose={() => setAwards([])}
+          onShowGoals={() => {
+            setAwards([])
+            setSelection(null)
+            setRootTab('goals')
+          }}
+        />
+      )}
 
       {state.bankrupt && (
         <div className="modal-back">
@@ -396,6 +430,8 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
             onChange((await readSaveFile(f)).state)
             setSelection(null)
             setRunning(false)
+            setAwards([])
+            setYearShown(null)
             flash('Tallennus ladattu.')
           } catch (err) {
             flash((err as Error).message)

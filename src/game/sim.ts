@@ -1,17 +1,19 @@
 import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
 import { getShipType } from '../data/shipTypes'
-import { effectiveFuelPerDay, fuelPrice, harbourFee, latePenalty, penaltyPerDay, planVoyage } from './economy'
+import { effectiveFuelPerDay, fuelPrice, harbourFee, latePenalty, paceInfo, penaltyPerDay, planVoyage, type Pace } from './economy'
 import { fmtMoney, fmtNum } from './format'
 import { getCargo, marketWeek, offerFits, portOffers } from './market'
 import { monthEnd } from './bank'
 import { resolveEvent, rollSeaEvents } from './events'
 import { MONTH, monthOf } from './calendar'
 import { finishRepairs } from './fleet'
+import { checkMilestones } from './milestones'
 import { monthNews } from './news'
 import { addLog as log, clone, getShip as shipOf } from './state'
 import type { Contract, GameState, OwnedShip } from './types'
 import { sailingTime } from './voyage'
+import { closeYear } from './yearReview'
 
 // All game rules that change state live here. Each function returns a new
 // state (the old one is never mutated), so React re-renders and autosave work.
@@ -36,8 +38,8 @@ export function refuel(state: GameState, shipId: string, tonnes?: number): GameS
 }
 
 /** Send a ship to `to`, optionally carrying a contract. Buys missing fuel automatically. */
-export function depart(state: GameState, shipId: string, to: string, contract: Contract | null = null): GameState {
-  const plan = planVoyage(state, shipId, to)
+export function depart(state: GameState, shipId: string, to: string, contract: Contract | null = null, pace: Pace = 'normal'): GameState {
+  const plan = planVoyage(state, shipId, to, pace)
   const before = shipOf(state, shipId)
   const t = getShipType(before.typeId)
   if (before.dockUntil !== null) throw new Error('Laiva on telakalla.')
@@ -53,28 +55,31 @@ export function depart(state: GameState, shipId: string, to: string, contract: C
     s.takenOffers = [...s.takenOffers, contract.id]
   }
   ship.voyage = { from: ship.portId!, to, departDay: s.day, arriveDay: s.day + plan.days, contract }
+  if (pace !== 'normal') ship.voyage.pace = pace
   ship.portId = null
   for (const c of plan.canals) {
+    if (!s.stats.canalsUsed.includes(c)) s.stats.canalsUsed = [...s.stats.canalsUsed, c]
     const toll = Math.round(plan.canalTolls / plan.canals.length)
     s.money -= toll
     s.ledger.canal += toll
     log(s, { kind: 'info', text: `${ship.name}: ${getCanal(c)?.name ?? c}, kanavamaksu.`, amount: -toll })
   }
   const what = contract ? `${fmtNum(contract.tonnes)} t ${getCargo(contract.cargoId).name.toLowerCase()}` : 'ilman lastia'
+  const how = pace === 'normal' ? '' : ` (${paceInfo(pace).label.toLowerCase()})`
   log(s, {
     kind: 'departure',
-    text: `${ship.name} lähti: ${getPort(plan.from).name} → ${getPort(to).name}, ${what}. Perillä noin ${plan.arriveInDays} päivässä.`,
+    text: `${ship.name} lähti${how}: ${getPort(plan.from).name} → ${getPort(to).name}, ${what}. Perillä noin ${plan.arriveInDays} päivässä.`,
   })
   return s
 }
 
 /** Accept a freight offer at the ship's port and sail at once. */
-export function acceptOffer(state: GameState, shipId: string, offerId: string): GameState {
+export function acceptOffer(state: GameState, shipId: string, offerId: string, pace: Pace = 'normal'): GameState {
   const ship = shipOf(state, shipId)
   if (!ship.portId) throw new Error('Laiva on merellä.')
   const offer = portOffers(state, ship.portId).find((o) => o.id === offerId)
   if (!offer) throw new Error('Tarjous ei ole enää voimassa.')
-  return depart(state, shipId, offer.to, offer)
+  return depart(state, shipId, offer.to, offer, pace)
 }
 
 /** Advance the clock one day: costs, fuel, wear, arrivals. */
@@ -94,8 +99,9 @@ export function advanceDay(state: GameState): GameState {
     if (!ship.voyage) continue
     // Burn only for the part of the day actually spent sailing.
     const sailed = sailingTime(ship.voyage, s.day - 1, s.day)
-    ship.fuel = Math.max(0, Math.round((ship.fuel - effectiveFuelPerDay(t, ship.condition) * sailed) * 10) / 10)
-    ship.condition = Math.max(0, Math.round((ship.condition - WEAR_PER_DAY) * 100) / 100)
+    const pace = ship.voyage.pace
+    ship.fuel = Math.max(0, Math.round((ship.fuel - effectiveFuelPerDay(t, ship.condition, pace) * sailed) * 10) / 10)
+    ship.condition = Math.max(0, Math.round((ship.condition - WEAR_PER_DAY * paceInfo(pace).wear) * 100) / 100)
     if (s.day >= ship.voyage.arriveDay) arrive(s, ship)
   }
   s.money -= running
@@ -114,6 +120,8 @@ function finishDay(s: GameState, moneyBefore: number): GameState {
     log(s, { kind: 'warning', text: 'Kassa on miinuksella! Kuun lopussa pankki kattaa vajeen lainalla, jos luottoa on jäljellä.' })
   }
   monthEnd(s)
+  closeYear(s)
+  checkMilestones(s)
   return s
 }
 
@@ -127,12 +135,33 @@ function arrive(s: GameState, ship: OwnedShip) {
   s.money -= fee
   s.ledger.harbour += fee
   log(s, { kind: 'arrival', text: `${ship.name} saapui satamaan ${port.name}. Satamamaksu.`, amount: -fee })
+  if (!s.stats.portsVisited.includes(port.id)) s.stats.portsVisited = [...s.stats.portsVisited, port.id]
   const c = v.contract
   if (!c) return
   const late = s.day - c.deadlineDay
   const pay = Math.round(c.pay * (v.payFactor ?? 1))
   s.money += pay
   s.ledger.revenue += pay
+  ship.earned = (ship.earned ?? 0) + pay - latePenalty(c, late)
+  const st = s.stats
+  st.deliveries += 1
+  st.tonnes += c.tonnes
+  if (late > 0) st.onTimeStreak = 0
+  else {
+    st.onTime += 1
+    st.onTimeStreak += 1
+    if (c.express) st.expressOnTime += 1
+  }
+  if (v.rush) {
+    if (s.day <= v.rush.byDay) {
+      s.money += v.rush.bonus
+      s.ledger.awards += v.rush.bonus
+      ship.earned += v.rush.bonus
+      log(s, { kind: 'award', text: `${ship.name} ehti luvattuun aikaan. Vastaanottaja maksoi kiirebonuksen.`, amount: v.rush.bonus })
+    } else {
+      log(s, { kind: 'late', text: `${ship.name} ei ehtinyt luvattuun aikaan, joten kiirebonus jäi saamatta.` })
+    }
+  }
   const cargo = getCargo(c.cargoId).name.toLowerCase()
   const kind = c.express ? 'Express-rahti: ' : ''
   if (late > 0) {

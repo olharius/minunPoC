@@ -250,9 +250,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 
 /* ---------- tabs, shipyard, fleet ---------- */
-.tabs { display: flex; gap: 4px; margin: 16px 0 10px; border-bottom: 2px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin: 16px 0 10px; border-bottom: 2px solid var(--line); }
 .panel > .tabs:first-child { margin-top: 0; }
-.tabs button { background: transparent; border: none; border-radius: 8px 8px 0 0; padding: 0.45rem 0.8rem; color: var(--muted); font-weight: 600; margin-bottom: -2px; border-bottom: 2px solid transparent; }
+.tabs button { background: transparent; border: none; border-radius: 8px 8px 0 0; padding: 0.45rem 0.3rem; font-size: 0.85rem; white-space: nowrap; color: var(--muted); font-weight: 600; margin-bottom: -2px; border-bottom: 2px solid transparent; }
 .tabs button.active { color: var(--bg); border-bottom-color: var(--accent); }
 .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .status.docked { color: #8a5a00; }
@@ -291,3 +291,25 @@ button:disabled { opacity: 0.5; cursor: default; }
   align-items: center;
   justify-content: space-between;
 }
+
+/* Speed choice in the voyage dialog */
+.pace-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 0 4px; }
+.pace-picker button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0.5rem 0.3rem; font-size: 0.85rem; background: #fffaf0; }
+.pace-picker button.active { outline: 2px solid var(--accent); background: #fff; }
+.pace-picker button:disabled { opacity: 0.5; }
+
+/* Milestones */
+.goal-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.goal-list li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.goal-list li.done { background: #f3f8ec; border-color: #b9d39a; }
+.goal-list .goal-head { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.goal-list .goal-reward { color: var(--muted); font-weight: 500; white-space: nowrap; }
+.goal-list .progress { margin: 6px 0 2px; }
+.trophy { font-size: 2.4rem; text-align: center; margin: 0; }
+
+/* Year review */
+table.years { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.years th, table.years td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+table.years th:first-child, table.years td:first-child { text-align: left; }
+button.link { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
+.verdict { font-weight: 600; text-align: center; }

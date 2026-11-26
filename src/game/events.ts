@@ -1,6 +1,6 @@
 import { getRoute, pointAlong } from '../data/routes'
 import { getShipType } from '../data/shipTypes'
-import { latePenalty, sizeFactor } from './economy'
+import { effectiveFuelPerDay, fuelPrice, latePenalty, paceInfo, sizeFactor } from './economy'
 import { shipValue } from './fleet'
 import { fmtMoney } from './format'
 import { hashString, rng } from './rng'
@@ -16,6 +16,8 @@ const P_STORM = 0.012
 const P_ENGINE = 0.006
 const P_PIRATES = 0.05 // per day inside a risk area
 const P_TAILWIND = 0.01
+const P_RESCUE = 0.004
+const P_RUSH = 0.008
 
 /** Delays and costs of each choice (also shown to the player before choosing). */
 export const STORM_DETOUR_DAYS = 2
@@ -25,6 +27,10 @@ export const RANSOM_DAYS = 4
 export const P_HIJACK = 0.25
 export const P_STORM_DAMAGE = 0.5
 export const STORM_CARGO_LOSS = 0.15
+export const RESCUE_DAYS = 1
+export const RESCUE_REWARD = 60_000
+/** Rush bonus as a share of the freight pay. */
+export const RUSH_BONUS = 0.12
 
 /** Waters with a piracy risk: [lonMin, latMin, lonMax, latMax]. */
 export const PIRATE_ZONES: { name: string; box: [number, number, number, number] }[] = [
@@ -51,6 +57,39 @@ export function shiftArrival(ship: OwnedShip, day: number, days: number) {
 
 function costFor(ship: OwnedShip, base: number) {
   return Math.round((base * sizeFactor(getShipType(ship.typeId))) / 1000) * 1000
+}
+
+export interface RushOffer {
+  bonus: number
+  /** Whole days earlier the ship would dock. */
+  days: number
+  /** Arrival day at full speed. */
+  arriveDay: number
+  /** Value of the extra fuel burned, dollars. */
+  fuelCost: number
+}
+
+/** What going full speed for the rest of the voyage would give, or null if it is not worth asking. */
+export function rushOffer(s: GameState, ship: OwnedShip): RushOffer | null {
+  const v = ship.voyage
+  if (!v?.contract || (v.pace ?? 'normal') === 'full' || activeHold(v, s.day)) return null
+  const t = getShipType(ship.typeId)
+  const left = v.arriveDay - s.day
+  const cur = paceInfo(v.pace)
+  const full = paceInfo('full')
+  const leftFull = (left * cur.speed) / full.speed
+  const arriveDay = s.day + leftFull
+  const days = Math.ceil(v.arriveDay) - Math.ceil(arriveDay)
+  if (days < 1 || left < 4) return null
+  const burnFull = leftFull * effectiveFuelPerDay(t, ship.condition, 'full')
+  if (burnFull > ship.fuel) return null
+  const extra = burnFull - left * effectiveFuelPerDay(t, ship.condition, v.pace)
+  return {
+    bonus: Math.max(5000, Math.round((v.contract.pay * RUSH_BONUS) / 1000) * 1000),
+    days,
+    arriveDay,
+    fuelCost: Math.round((extra * fuelPrice(s, v.to)) / 1000) * 1000,
+  }
 }
 
 /** Roll today's events. Mutates `s`; may set s.pendingEvent. */
@@ -107,6 +146,36 @@ export function rollSeaEvents(s: GameState) {
         options: [
           { id: 'self', label: 'Korjataan omin voimin (+3 päivää)', detail: 'Ei kuluja, mutta laiva ajelehtii päiväkausia.' },
           { id: 'service', label: `Tilaa huoltoalus (${fmtMoney(tug)}, +1 päivä)`, detail: 'Nopea apu varaosineen.' },
+        ],
+      }
+      continue
+    }
+    if (!seen.has('rescue') && r.next() < P_RESCUE) {
+      s.pendingEvent = {
+        kind: 'rescue',
+        shipId: ship.id,
+        day: s.day,
+        title: 'Hätämerkki',
+        text: `${ship.name} vastaanotti hätämerkin: pieni kalastusalus on uppoamassa lähistöllä, ja miehistö on pelastuslautalla.`,
+        options: [
+          { id: 'help', label: `Pelasta miehistö itse (+${RESCUE_DAYS} päivä)`, detail: `Kalastusaluksen vakuutusyhtiö maksaa pelastuspalkkion (${fmtMoney(RESCUE_REWARD)}).` },
+          { id: 'report', label: 'Ilmoita meripelastukselle ja jatka', detail: 'Rannikkovartiosto ehtii paikalle muutamassa tunnissa. Aikataulu pitää.' },
+        ],
+      }
+      continue
+    }
+    const rush = rushOffer(s, ship)
+    if (rush && !seen.has('rush') && r.next() < P_RUSH) {
+      const c = v.contract!
+      s.pendingEvent = {
+        kind: 'rush',
+        shipId: ship.id,
+        day: s.day,
+        title: 'Vastaanottajalla on kiire',
+        text: `Lastin vastaanottaja tarvitsee lastin aiemmin ja lupaa ${fmtMoney(rush.bonus)} bonuksen, jos ${ship.name} on perillä viimeistään ${rush.days} päivää arvioitua aiemmin. Rahtimaksu ${fmtMoney(c.pay)} maksetaan joka tapauksessa.`,
+        options: [
+          { id: 'keep', label: 'Pidä nykyinen vauhti', detail: 'Ei bonusta, ei lisäkuluja.' },
+          { id: 'rush', label: `Täysi vauhti loppumatkaksi (bonus ${fmtMoney(rush.bonus)})`, detail: 'Polttoainetta kuluu enemmän ja laiva kuluu nopeammin. Myrsky tai konevika voi viedä bonuksen.' },
         ],
       }
       continue
@@ -168,6 +237,26 @@ export function resolveEvent(state: GameState, optionId: string): GameState {
     } else {
       log(s, { kind: 'event', text: `${ship.name} ylitti riskialueen ilman välikohtauksia.` })
     }
+  } else if (ev.kind === 'rescue') {
+    if (optionId === 'help') {
+      holdShip(v, s.day, RESCUE_DAYS, 'rescue')
+      s.stats.rescues += 1
+      s.money += RESCUE_REWARD
+      s.ledger.awards += RESCUE_REWARD
+      log(s, { kind: 'award', text: `${ship.name} pelasti kalastusaluksen miehistön. Vakuutusyhtiö maksoi pelastuspalkkion.`, amount: RESCUE_REWARD })
+    } else {
+      log(s, { kind: 'event', text: `${ship.name} ilmoitti hätämerkistä meripelastukselle ja jatkoi matkaa.` })
+    }
+  } else if (ev.kind === 'rush') {
+    const rush = rushOffer(state, state.ships.find((x) => x.id === ship.id)!)
+    if (optionId === 'rush' && rush) {
+      shiftArrival(ship, s.day, rush.arriveDay - v.arriveDay)
+      v.pace = 'full'
+      v.rush = { bonus: rush.bonus, byDay: Math.ceil(rush.arriveDay) }
+      log(s, { kind: 'event', text: `${ship.name} ajaa loppumatkan täyttä vauhtia ehtiäkseen kiirebonukseen.` })
+    } else {
+      log(s, { kind: 'event', text: `${ship.name} jatkaa entistä vauhtia.` })
+    }
   }
   return s
 }
@@ -186,6 +275,10 @@ export interface Outcome {
   cost: number
   /** Freight pay lost to damaged cargo. */
   cargoLoss: number
+  /** Money earned (rescue reward, rush bonus). */
+  reward: number
+  /** Value of extra fuel burned. */
+  fuel: number
 }
 
 export interface OptionOutlook {
@@ -203,7 +296,7 @@ export function eventOutlook(s: GameState): { ship: OwnedShip; options: OptionOu
   if (!ev || !ship?.voyage) return null
   const v = ship.voyage
   const c = v.contract
-  const outcome = (delay: number, cost = 0, cargoShare = 0): Outcome => {
+  const outcome = (delay: number, cost = 0, cargoShare = 0, reward = 0, fuel = 0): Outcome => {
     const arriveDay = Math.ceil(v.arriveDay + delay)
     const lateDays = c ? Math.max(0, arriveDay - c.deadlineDay) : null
     return {
@@ -213,9 +306,12 @@ export function eventOutlook(s: GameState): { ship: OwnedShip; options: OptionOu
       penalty: c && lateDays ? latePenalty(c, lateDays) : 0,
       cost,
       cargoLoss: c ? Math.round(c.pay * (v.payFactor ?? 1) * cargoShare) : 0,
+      reward,
+      fuel,
     }
   }
   const ransom = Math.round((shipValue(ship) * 0.05) / 1000) * 1000
+  const rush = ev.kind === 'rush' ? rushOffer(s, ship) : null
   const options = ev.options.map((o): OptionOutlook => {
     switch (`${ev.kind}:${o.id}`) {
       case 'storm:around':
@@ -230,6 +326,10 @@ export function eventOutlook(s: GameState): { ship: OwnedShip; options: OptionOu
         return { optionId: o.id, sure: outcome(0, costFor(ship, 40000)) }
       case 'pirates:risk':
         return { optionId: o.id, sure: outcome(0), risk: { chance: P_HIJACK, outcome: outcome(RANSOM_DAYS, ransom) } }
+      case 'rescue:help':
+        return { optionId: o.id, sure: outcome(RESCUE_DAYS, 0, 0, RESCUE_REWARD) }
+      case 'rush:rush':
+        return rush ? { optionId: o.id, sure: outcome(rush.arriveDay - v.arriveDay, 0, 0, rush.bonus, rush.fuelCost) } : { optionId: o.id, sure: outcome(0) }
       default:
         return { optionId: o.id, sure: outcome(0) }
     }

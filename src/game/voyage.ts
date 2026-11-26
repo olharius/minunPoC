@@ -39,7 +39,8 @@ export function sailingTime(v: Voyage, a: number, b: number): number {
 /** Short Finnish status for a held ship, e.g. "Korjaus käynnissä, 3 pv". */
 export function holdText(h: VoyageHold, time: number): string {
   const left = Math.max(1, Math.ceil(h.until - time))
-  const what = h.reason === 'pirates' ? 'Merirosvojen hallussa' : h.reason === 'service' ? 'Huoltoalus korjaa konetta' : 'Korjaus käynnissä'
+  const what =
+    h.reason === 'pirates' ? 'Merirosvojen hallussa' : h.reason === 'service' ? 'Huoltoalus korjaa konetta' : h.reason === 'rescue' ? 'Pelastustehtävä' : 'Korjaus käynnissä'
   return `${what}, ${left} pv`
 }
 

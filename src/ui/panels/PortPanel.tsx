@@ -3,7 +3,7 @@ import { PORTS, getPort } from '../../data/ports'
 import { getRoute } from '../../data/routes'
 import { getShipType } from '../../data/shipTypes'
 import { mainExports, mainImports } from '../../data/trade'
-import { fuelPrice, harbourFee, inRange, penaltyPerDay } from '../../game/economy'
+import { BUNKER_HUBS, fuelPrice, fuelPriceLevel, harbourFee, inRange, penaltyPerDay } from '../../game/economy'
 import { canRepairAt, repairQuote, sellsNewShips, shipValue, usedListings } from '../../game/fleet'
 import { fmtDay, fmtMoney, fmtNum } from '../../game/format'
 import { getCargo, nextMarketDay, offerFits, portOffers } from '../../game/market'
@@ -59,7 +59,11 @@ export function PortPanel(props: Props) {
       </div>
       <dl className="facts">
         <dt>Polttoaine</dt>
-        <dd>{fmtMoney(price)} / t</dd>
+        <dd>
+          {fmtMoney(price)} / t{' '}
+          {{ cheap: <span className="pos">(edullinen)</span>, dear: <span className="neg">(kallis)</span>, normal: <span className="muted">(keskitasoa)</span> }[fuelPriceLevel(state, portId)]}
+          {BUNKER_HUBS.has(portId) && <span className="muted"> · tankkaussatama</span>}
+        </dd>
         {t && (
           <>
             <dt>Satamamaksu</dt>

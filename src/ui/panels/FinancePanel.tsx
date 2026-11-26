@@ -2,18 +2,20 @@ import { creditAvailable, creditLimit, LOAN_RATE, monthlyInterest } from '../../
 import { fleetValue } from '../../game/fleet'
 import { fmtCost, fmtMoney } from '../../game/format'
 import type { GameState } from '../../game/types'
+import { ledgerCosts } from '../../game/yearReview'
 
 interface Props {
   state: GameState
   onBorrow: (amount: number) => void
   onRepay: (amount: number) => void
+  onShowYear: (year: number) => void
 }
 
 const STEPS = [500_000, 2_000_000, 10_000_000]
 
-export function FinancePanel({ state, onBorrow, onRepay }: Props) {
+export function FinancePanel({ state, onBorrow, onRepay, onShowYear }: Props) {
   const l = state.ledger
-  const costs = l.fuel + l.harbour + l.canal + l.running + l.repairs + l.interest + l.incidents + (l.penalties ?? 0)
+  const costs = ledgerCosts(l)
   const fleet = fleetValue(state)
   const avail = creditAvailable(state)
   const short = (n: number) => (n >= 1e6 ? `${n / 1e6} M` : `${n / 1000} k`)
@@ -82,9 +84,39 @@ export function FinancePanel({ state, onBorrow, onRepay }: Props) {
         <dd>{fmtCost(l.incidents)}</dd>
         <dt>Sopimussakot</dt>
         <dd>{fmtCost(l.penalties ?? 0)}</dd>
+        <dt>Palkinnot ja bonukset</dt>
+        <dd className="pos">{fmtMoney(l.awards)}</dd>
         <dt className="total">Tulos</dt>
-        <dd className={`total ${l.revenue - costs < 0 ? 'neg' : 'pos'}`}>{fmtMoney(l.revenue - costs)}</dd>
+        <dd className={`total ${l.revenue + l.awards - costs < 0 ? 'neg' : 'pos'}`}>{fmtMoney(l.revenue + l.awards - costs)}</dd>
       </dl>
+
+      {state.yearReports.length > 0 && (
+        <>
+          <h3>Vuodet</h3>
+          <table className="years">
+            <thead>
+              <tr>
+                <th>Vuosi</th>
+                <th>Tulos</th>
+                <th>Yhtiön arvo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...state.yearReports].reverse().map((r) => (
+                <tr key={r.year}>
+                  <td>
+                    <button className="link" onClick={() => onShowYear(r.year)}>
+                      {r.year}
+                    </button>
+                  </td>
+                  <td className={r.revenue - r.costs < 0 ? 'neg' : 'pos'}>{fmtMoney(r.revenue - r.costs)}</td>
+                  <td>{fmtMoney(r.netWorthEnd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   )
 }
