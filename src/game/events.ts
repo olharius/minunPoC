@@ -1,6 +1,7 @@
 import { getRoute, pointAlong } from '../data/routes'
 import { getShipType } from '../data/shipTypes'
 import { effectiveFuelPerDay, fuelPrice, latePenalty, paceInfo, sizeFactor } from './economy'
+import { captainMods } from './captains'
 import { shipValue } from './fleet'
 import { fmtMoney } from './format'
 import { hashString, rng } from './rng'
@@ -81,9 +82,10 @@ export function rushOffer(s: GameState, ship: OwnedShip): RushOffer | null {
   const arriveDay = s.day + leftFull
   const days = Math.ceil(v.arriveDay) - Math.ceil(arriveDay)
   if (days < 1 || left < 4) return null
-  const burnFull = leftFull * effectiveFuelPerDay(t, ship.condition, 'full')
+  const m = captainMods(ship)
+  const burnFull = leftFull * effectiveFuelPerDay(t, ship.condition, 'full', m)
   if (burnFull > ship.fuel) return null
-  const extra = burnFull - left * effectiveFuelPerDay(t, ship.condition, v.pace)
+  const extra = burnFull - left * effectiveFuelPerDay(t, ship.condition, v.pace, m)
   return {
     bonus: Math.max(5000, Math.round((v.contract.pay * RUSH_BONUS) / 1000) * 1000),
     days,
@@ -104,7 +106,7 @@ export function rollSeaEvents(s: GameState) {
     const r = rng(hashString(`${s.seed}:sea:${ship.id}:${s.day}`))
     const seen = new Set(v.events ?? [])
     const zone = pirateZoneAt(shipPosition(ship, s.day))
-    const engineRisk = P_ENGINE * (1 + (100 - ship.condition) / 40)
+    const engineRisk = P_ENGINE * (1 + (100 - ship.condition) / 40) * captainMods(ship).engine
 
     if (zone && !seen.has('pirates') && r.next() < P_PIRATES) {
       const guards = costFor(ship, 40000)
@@ -208,7 +210,7 @@ export function resolveEvent(state: GameState, optionId: string): GameState {
     if (optionId === 'around') {
       shiftArrival(ship, s.day, STORM_DETOUR_DAYS)
       log(s, { kind: 'event', text: `${ship.name} kiersi myrskyn. Matka pitenee kahdella päivällä.` })
-    } else if (r.next() < 1 - P_STORM_DAMAGE) {
+    } else if (r.next() < 1 - P_STORM_DAMAGE * captainMods(ship).storm) {
       log(s, { kind: 'event', text: `${ship.name} selvisi myrskystä ehjänä.` })
     } else {
       ship.condition = Math.max(0, ship.condition - 8)
@@ -230,7 +232,7 @@ export function resolveEvent(state: GameState, optionId: string): GameState {
   } else if (ev.kind === 'pirates') {
     if (optionId === 'guards') {
       spend(costFor(ship, 40000), `${ship.name} palkkasi vartijat ja ylitti riskialueen turvallisesti.`)
-    } else if (r.next() < P_HIJACK) {
+    } else if (r.next() < P_HIJACK * captainMods(ship).hijack) {
       const ransom = Math.round((shipValue(ship) * 0.05) / 1000) * 1000
       holdShip(v, s.day, RANSOM_DAYS, 'pirates')
       spend(ransom, `Merirosvot kaappasivat laivan ${ship.name}! Lunnaat maksettiin, ja matka viivästyy neljä päivää.`)
@@ -317,7 +319,7 @@ export function eventOutlook(s: GameState): { ship: OwnedShip; options: OptionOu
       case 'storm:around':
         return { optionId: o.id, sure: outcome(STORM_DETOUR_DAYS) }
       case 'storm:through':
-        return { optionId: o.id, sure: outcome(0), risk: { chance: P_STORM_DAMAGE, outcome: outcome(0, 0, STORM_CARGO_LOSS) } }
+        return { optionId: o.id, sure: outcome(0), risk: { chance: P_STORM_DAMAGE * captainMods(ship).storm, outcome: outcome(0, 0, STORM_CARGO_LOSS) } }
       case 'engine:self':
         return { optionId: o.id, sure: outcome(ENGINE_SELF_DAYS) }
       case 'engine:service':
@@ -325,7 +327,7 @@ export function eventOutlook(s: GameState): { ship: OwnedShip; options: OptionOu
       case 'pirates:guards':
         return { optionId: o.id, sure: outcome(0, costFor(ship, 40000)) }
       case 'pirates:risk':
-        return { optionId: o.id, sure: outcome(0), risk: { chance: P_HIJACK, outcome: outcome(RANSOM_DAYS, ransom) } }
+        return { optionId: o.id, sure: outcome(0), risk: { chance: P_HIJACK * captainMods(ship).hijack, outcome: outcome(RANSOM_DAYS, ransom) } }
       case 'rescue:help':
         return { optionId: o.id, sure: outcome(RESCUE_DAYS, 0, 0, RESCUE_REWARD) }
       case 'rush:rush':

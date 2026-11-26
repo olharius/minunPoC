@@ -4,6 +4,7 @@ import { getRoute } from '../data/routes'
 import { getShipType, type ShipType } from '../data/shipTypes'
 import { portOnStrike } from './news'
 import { hashString, rng } from './rng'
+import { captainMods, NO_MODS, shipDailyCost, type ShipMods } from './captains'
 import { getShip } from './state'
 import type { Contract, GameState, Pace } from './types'
 
@@ -83,22 +84,22 @@ export function paceInfo(pace: Pace | undefined): PaceInfo {
 }
 
 /** A worn hull is slower: at 0 % condition the ship makes 80 % of its speed. */
-export function effectiveSpeed(t: ShipType, condition = 100, pace?: Pace): number {
-  return t.speed * (0.8 + 0.2 * (condition / 100)) * paceInfo(pace).speed
+export function effectiveSpeed(t: ShipType, condition = 100, pace?: Pace, m: ShipMods = NO_MODS): number {
+  return t.speed * (0.8 + 0.2 * (condition / 100)) * paceInfo(pace).speed * m.speed
 }
 
 /** A worn engine burns more: up to +40 % at 0 % condition. */
-export function effectiveFuelPerDay(t: ShipType, condition = 100, pace?: Pace): number {
-  return t.fuelPerDay * (1 + 0.4 * (1 - condition / 100)) * paceInfo(pace).fuel
+export function effectiveFuelPerDay(t: ShipType, condition = 100, pace?: Pace, m: ShipMods = NO_MODS): number {
+  return t.fuelPerDay * (1 + 0.4 * (1 - condition / 100)) * paceInfo(pace).fuel * m.fuel
 }
 
-export function sailingDays(nm: number, t: ShipType, condition = 100, pace?: Pace): number {
-  return nm / (effectiveSpeed(t, condition, pace) * SPEED_FACTOR * 24)
+export function sailingDays(nm: number, t: ShipType, condition = 100, pace?: Pace, m: ShipMods = NO_MODS): number {
+  return nm / (effectiveSpeed(t, condition, pace, m) * SPEED_FACTOR * 24)
 }
 
 /** Fuel for a voyage including a 10 % reserve, as any sensible captain keeps. */
-export function fuelForVoyage(nm: number, t: ShipType, condition = 100, pace?: Pace): number {
-  return Math.ceil(sailingDays(nm, t, condition, pace) * effectiveFuelPerDay(t, condition, pace) * 1.1)
+export function fuelForVoyage(nm: number, t: ShipType, condition = 100, pace?: Pace, m: ShipMods = NO_MODS): number {
+  return Math.ceil(sailingDays(nm, t, condition, pace, m) * effectiveFuelPerDay(t, condition, pace, m) * 1.1)
 }
 
 /** Can the ship make the trip on one tank? */
@@ -130,12 +131,13 @@ export function planVoyage(state: GameState, shipId: string, to: string, pace: P
   if (!ship?.portId) throw new Error('Laiva ei ole satamassa.')
   const t = getShipType(ship.typeId)
   const route = getRoute(ship.portId, to)
-  const days = sailingDays(route.nm, t, ship.condition, pace)
+  const m = captainMods(ship)
+  const days = sailingDays(route.nm, t, ship.condition, pace, m)
   const arriveInDays = Math.max(1, Math.ceil(days))
-  const fuelNeeded = fuelForVoyage(route.nm, t, ship.condition, pace)
+  const fuelNeeded = fuelForVoyage(route.nm, t, ship.condition, pace, m)
   const fuelToBuy = Math.max(0, fuelNeeded - ship.fuel)
   const fuelCost = Math.round(fuelToBuy * fuelPrice(state, ship.portId))
-  const runningCost = Math.round(arriveInDays * t.dailyCost)
+  const runningCost = Math.round(arriveInDays * shipDailyCost(ship))
   const fee = harbourFee(to, t, state)
   const canalTolls = route.canals.reduce((s, c) => s + canalToll(c, t), 0)
   return {
@@ -160,8 +162,9 @@ export function voyageFuelValue(state: GameState, shipId: string, to: string, pa
   const ship = getShip(state, shipId)
   if (!ship.portId) throw new Error('Laiva ei ole satamassa.')
   const t = getShipType(ship.typeId)
-  const days = sailingDays(getRoute(ship.portId, to).nm, t, ship.condition, pace)
-  return Math.round(days * effectiveFuelPerDay(t, ship.condition, pace) * fuelPrice(state, ship.portId))
+  const m = captainMods(ship)
+  const days = sailingDays(getRoute(ship.portId, to).nm, t, ship.condition, pace, m)
+  return Math.round(days * effectiveFuelPerDay(t, ship.condition, pace, m) * fuelPrice(state, ship.portId))
 }
 
 /** Daily contract penalty as a share of the freight pay. */
@@ -178,4 +181,31 @@ export function penaltyPerDay(c: Pick<Contract, 'pay' | 'express' | 'penaltyPerD
 export function latePenalty(c: Pick<Contract, 'pay' | 'express' | 'penaltyPerDay'>, daysLate: number): number {
   if (daysLate <= 0) return 0
   return Math.min(c.pay, daysLate * penaltyPerDay(c))
+}
+
+export interface VoyageEstimate {
+  plan: VoyagePlan
+  /** Value of fuel burned on the way. */
+  burned: number
+  arrivalDay: number
+  /** Days late (negative = days to spare); 0 without a contract. */
+  late: number
+  revenue: number
+  /** Extra freight pay from a trader captain. */
+  payBonus: number
+  penalty: number
+  profit: number
+}
+
+/** Days, costs and result of a voyage at one pace. */
+export function voyageEstimate(state: GameState, shipId: string, to: string, contract: Contract | null, pace: Pace = 'normal'): VoyageEstimate {
+  const plan = planVoyage(state, shipId, to, pace)
+  const burned = voyageFuelValue(state, shipId, to, pace)
+  const arrivalDay = state.day + plan.arriveInDays
+  const late = contract ? arrivalDay - contract.deadlineDay : 0
+  const revenue = contract ? contract.pay : 0
+  const payBonus = Math.round(revenue * captainMods(getShip(state, shipId)).payBonus)
+  const penalty = contract ? latePenalty(contract, late) : 0
+  const profit = revenue + payBonus - (burned + plan.runningCost + plan.harbourFee + plan.canalTolls + penalty)
+  return { plan, burned, arrivalDay, late, revenue, payBonus, penalty, profit }
 }

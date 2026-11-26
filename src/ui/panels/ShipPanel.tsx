@@ -5,6 +5,8 @@ import { latePenalty, penaltyPerDay } from '../../game/economy'
 import { getCargo } from '../../game/market'
 import type { GameState } from '../../game/types'
 import { activeHold, holdText, voyageProgress } from '../../game/voyage'
+import { shipDailyCost } from '../../game/captains'
+import { CaptainInfo } from './CaptainInfo'
 
 interface Props {
   state: GameState
@@ -12,9 +14,11 @@ interface Props {
   time: number
   onClose: () => void
   onSelectPort: (id: string) => void
+  onOrders: (shipId: string) => void
+  onDismissCaptain: (shipId: string) => void
 }
 
-export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props) {
+export function ShipPanel({ state, shipId, time, onClose, onSelectPort, onOrders, onDismissCaptain }: Props) {
   const ship = state.ships.find((s) => s.id === shipId)
   if (!ship) return null
   const t = getShipType(ship.typeId)
@@ -33,6 +37,23 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props)
       </div>
       <div className="muted">{t.name}</div>
       <p className="hint">{t.description}</p>
+      <CaptainInfo ship={ship} />
+      <div className="btn-row">
+        <button className="small" onClick={() => onOrders(ship.id)}>
+          🤖 {ship.orders ? 'Muuta automaattiohjausta…' : 'Automaattiohjaus…'}
+        </button>
+        {ship.captain && (
+          <button className="small" onClick={() => onDismissCaptain(ship.id)}>
+            Erota kapteeni
+          </button>
+        )}
+      </div>
+      {ship.orders && (
+        <p className="status">
+          <span className="badge auto">Automaatti</span>
+          {ship.orders.regions.length ? ship.orders.regions.join(', ') : 'Koko maailma'}
+        </p>
+      )}
 
       {v ? (
         <div className="voyage-box">
@@ -91,7 +112,7 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props)
           <button className="link" onClick={() => onSelectPort(ship.portId!)}>
             {getPort(ship.portId!).name}
           </button>
-          . Avaa satama ottaaksesi rahdin.
+          . {ship.orders ? 'Automaatti etsii sopivaa rahtia.' : 'Avaa satama ottaaksesi rahdin.'}
         </p>
       )}
 
@@ -108,7 +129,7 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort }: Props)
         <dt>Kulutus</dt>
         <dd>{t.fuelPerDay} t/päivä</dd>
         <dt>Päiväkulut</dt>
-        <dd>{fmtMoney(t.dailyCost)}</dd>
+        <dd>{fmtMoney(shipDailyCost(ship))}</dd>
         <dt>Kunto</dt>
         <dd>{Math.round(ship.condition)} %</dd>
       </dl>

@@ -10,6 +10,8 @@ import { getCargo, nextMarketDay, offerFits, portOffers } from '../../game/marke
 import type { Contract, GameState } from '../../game/types'
 import { portOnStrike } from '../../game/news'
 import { ShipyardTab } from './ShipyardTab'
+import { CaptainInfo } from './CaptainInfo'
+import { CaptainsTab } from './CaptainsTab'
 
 export interface PortActions {
   onChooseOffer: (shipId: string, offer: Contract) => void
@@ -20,6 +22,8 @@ export interface PortActions {
   onBuyNew: (portId: string, typeId: string) => void
   onBuyUsed: (listingId: string) => void
   onPreview: (to: string | null) => void
+  onHire: (shipId: string, captainId: string) => void
+  onOrders: (shipId: string) => void
 }
 
 interface Props extends PortActions {
@@ -30,7 +34,7 @@ interface Props extends PortActions {
   onClose: () => void
 }
 
-type Tab = 'freight' | 'yard'
+type Tab = 'freight' | 'yard' | 'crew'
 
 export function PortPanel(props: Props) {
   const { state, portId, onClose } = props
@@ -106,6 +110,13 @@ export function PortPanel(props: Props) {
             <span className={ship.condition < 50 ? 'neg' : ''}>Kunto {Math.round(ship.condition)} %</span>
             <span>Arvo {fmtMoney(shipValue(ship))}</span>
           </div>
+          <CaptainInfo ship={ship} />
+          {ship.orders && (
+            <div className="status">
+              <span className="badge auto">Automaatti</span>
+              {ship.dockUntil === null ? 'Etsii sopivaa rahtia. Laiva lähtee itse, kun kannattava rahti löytyy.' : 'Telakoitu automaattisesti.'}
+            </div>
+          )}
           {ship.dockUntil !== null ? (
             <div className="status docked">Telakalla, valmis {fmtDay(state, ship.dockUntil)}</div>
           ) : (
@@ -121,6 +132,9 @@ export function PortPanel(props: Props) {
               <button className="small" disabled={state.ships.length < 2} onClick={() => props.onSell(ship.id)} title={state.ships.length < 2 ? 'Viimeistä laivaa ei voi myydä' : ''}>
                 Myy ({fmtMoney(shipValue(ship))})
               </button>
+              <button className="small" onClick={() => props.onOrders(ship.id)}>
+                🤖 Automaattiohjaus…
+              </button>
             </div>
           )}
         </div>
@@ -133,13 +147,14 @@ export function PortPanel(props: Props) {
         <button role="tab" aria-selected={tab === 'yard'} className={tab === 'yard' ? 'active' : ''} onClick={() => setTab('yard')}>
           Laivakauppa
         </button>
+        <button role="tab" aria-selected={tab === 'crew'} className={tab === 'crew' ? 'active' : ''} onClick={() => setTab('crew')}>
+          Kapteenit
+        </button>
       </div>
 
-      {tab === 'freight' ? (
-        <FreightTab {...props} ship={ship} />
-      ) : (
-        <ShipyardTab state={state} portId={portId} onBuyNew={props.onBuyNew} onBuyUsed={props.onBuyUsed} />
-      )}
+      {tab === 'freight' && <FreightTab {...props} ship={ship} />}
+      {tab === 'yard' && <ShipyardTab state={state} portId={portId} onBuyNew={props.onBuyNew} onBuyUsed={props.onBuyUsed} />}
+      {tab === 'crew' && <CaptainsTab state={state} portId={portId} ship={ship} onHire={props.onHire} />}
     </div>
   )
 }

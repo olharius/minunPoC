@@ -8,7 +8,9 @@ import { monthEnd } from './bank'
 import { resolveEvent, rollSeaEvents } from './events'
 import { MONTH, monthOf } from './calendar'
 import { finishRepairs } from './fleet'
+import { captainDayAtSea, captainMods, shipDailyCost } from './captains'
 import { checkMilestones } from './milestones'
+import { BROKER_FEE, runOrders } from './orders'
 import { monthNews } from './news'
 import { addLog as log, clone, getShip as shipOf } from './state'
 import type { Contract, GameState, OwnedShip } from './types'
@@ -56,6 +58,7 @@ export function depart(state: GameState, shipId: string, to: string, contract: C
   }
   ship.voyage = { from: ship.portId!, to, departDay: s.day, arriveDay: s.day + plan.days, contract }
   if (pace !== 'normal') ship.voyage.pace = pace
+  if (ship.orders) delete ship.orders.waitingSince
   ship.portId = null
   for (const c of plan.canals) {
     if (!s.stats.canalsUsed.includes(c)) s.stats.canalsUsed = [...s.stats.canalsUsed, c]
@@ -94,14 +97,16 @@ export function advanceDay(state: GameState): GameState {
   let running = 0
   for (const ship of s.ships) {
     const t = getShipType(ship.typeId)
-    running += t.dailyCost
+    running += shipDailyCost(ship)
     if (ship.dockUntil !== null) running -= t.dailyCost / 2 // crew partly ashore while in dock
     if (!ship.voyage) continue
     // Burn only for the part of the day actually spent sailing.
     const sailed = sailingTime(ship.voyage, s.day - 1, s.day)
     const pace = ship.voyage.pace
-    ship.fuel = Math.max(0, Math.round((ship.fuel - effectiveFuelPerDay(t, ship.condition, pace) * sailed) * 10) / 10)
-    ship.condition = Math.max(0, Math.round((ship.condition - WEAR_PER_DAY * paceInfo(pace).wear) * 100) / 100)
+    const m = captainMods(ship)
+    ship.fuel = Math.max(0, Math.round((ship.fuel - effectiveFuelPerDay(t, ship.condition, pace, m) * sailed) * 10) / 10)
+    ship.condition = Math.max(0, Math.round((ship.condition - WEAR_PER_DAY * paceInfo(pace).wear * m.wear) * 100) / 100)
+    if (sailed > 0) captainDayAtSea(s, ship)
     if (s.day >= ship.voyage.arriveDay) arrive(s, ship)
   }
   s.money -= running
@@ -109,7 +114,9 @@ export function advanceDay(state: GameState): GameState {
   finishRepairs(s)
   rollSeaEvents(s)
   // Captains decide on their own: the first option is always the safe one.
-  const out = s.pendingEvent && s.settings.autoEvents ? resolveEvent(s, s.pendingEvent.options[0].id) : s
+  const decided = s.pendingEvent && s.settings.autoEvents ? resolveEvent(s, s.pendingEvent.options[0].id) : s
+  // Ships under standing orders pick their next job.
+  const out = runOrders(decided)
   return finishDay(out, state.money)
 }
 
@@ -143,6 +150,20 @@ function arrive(s: GameState, ship: OwnedShip) {
   s.money += pay
   s.ledger.revenue += pay
   ship.earned = (ship.earned ?? 0) + pay - latePenalty(c, late)
+  if (ship.orders) {
+    const fee = Math.round(c.pay * BROKER_FEE)
+    s.money -= fee
+    s.ledger.running += fee
+    ship.earned -= fee
+    log(s, { kind: 'info', text: `Rahtimeklarin palkkio (${Math.round(BROKER_FEE * 100)} %, automaattiohjaus).`, amount: -fee })
+  }
+  const bonus = Math.round(pay * captainMods(ship).payBonus)
+  if (bonus > 0) {
+    s.money += bonus
+    s.ledger.revenue += bonus
+    ship.earned += bonus
+    log(s, { kind: 'delivery', text: `Kapteeni ${ship.captain!.name} neuvotteli lisämaksun.`, amount: bonus })
+  }
   const st = s.stats
   st.deliveries += 1
   st.tonnes += c.tonnes
@@ -195,6 +216,8 @@ export function newlyIdle(before: GameState, after: GameState): IdleNotice[] {
   for (const s of after.ships) {
     const b = before.ships.find((x) => x.id === s.id)
     if (!b || s.voyage || s.dockUntil !== null || !s.portId) continue
+    // Ships under standing orders look after themselves.
+    if (s.orders) continue
     if (b.voyage) out.push({ shipId: s.id, reason: 'arrived' })
     else if (b.dockUntil !== null) out.push({ shipId: s.id, reason: 'repaired' })
     else if (boardChanged && b.portId === s.portId) {

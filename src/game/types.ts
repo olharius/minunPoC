@@ -75,6 +75,29 @@ export interface Settings {
   autoEvents: boolean
 }
 
+export type CaptainTrait = 'navigator' | 'mechanic' | 'saver' | 'trader' | 'seadog'
+
+export interface Captain {
+  id: string
+  name: string
+  trait: CaptainTrait
+  /** 1–5; grows with days at sea. */
+  level: number
+  /** Days at sea under this company. */
+  xp: number
+}
+
+/** Standing orders: the ship finds its own freight inside an area. */
+export interface ShipOrders {
+  /** Regions the ship works in (port regions); empty = the whole world. */
+  regions: string[]
+  pace: Pace
+  /** Go to dry dock by itself when worn. */
+  autoRepair: boolean
+  /** Day the ship began waiting for a good offer (internal). */
+  waitingSince?: number
+}
+
 export interface OwnedShip {
   id: string
   name: string
@@ -92,6 +115,8 @@ export interface OwnedShip {
   acquiredDay: number
   /** Freight pay earned by the ship, after contract penalties (for the year review). */
   earned?: number
+  captain?: Captain
+  orders?: ShipOrders
 }
 
 export type LogKind = 'arrival' | 'delivery' | 'late' | 'departure' | 'info' | 'warning' | 'bank' | 'shipyard' | 'event' | 'news' | 'award'
@@ -183,7 +208,7 @@ export interface GameState {
   ledger: Ledger
   /** Bank loan outstanding, dollars. */
   loan: number
-  /** Used-ship listings already bought this month. */
+  /** Used-ship listings bought and captains hired this month. */
   takenListings: string[]
   /** Set when the bank refuses further credit while the till is empty. */
   bankrupt: boolean
