@@ -18,6 +18,9 @@ export interface Contract {
   penaltyPerDay?: number
 }
 
+/** How hard a ship is driven on a voyage (see PACES in economy.ts). */
+export type Pace = 'eco' | 'normal' | 'full'
+
 export interface Voyage {
   from: string
   to: string
@@ -36,13 +39,17 @@ export interface Voyage {
   anchor?: { day: number; t: number }
   /** Times the ship stood still at sea (repairs, pirates). */
   holds?: VoyageHold[]
+  /** Chosen speed; missing = normal (older saves). */
+  pace?: Pace
+  /** Bonus promised by the consignee for docking by `byDay` (rush event). */
+  rush?: { bonus: number; byDay: number }
 }
 
 /** The ship stays where it is from `from` until `until` (days). */
 export interface VoyageHold {
   from: number
   until: number
-  reason: 'repair' | 'service' | 'pirates'
+  reason: 'repair' | 'service' | 'pirates' | 'rescue'
 }
 
 export interface EventOption {
@@ -53,7 +60,7 @@ export interface EventOption {
 
 /** A decision waiting for the player; time stops until it is answered. */
 export interface PendingEvent {
-  kind: 'storm' | 'engine' | 'pirates'
+  kind: 'storm' | 'engine' | 'pirates' | 'rescue' | 'rush'
   shipId: string
   day: number
   title: string
@@ -83,9 +90,11 @@ export interface OwnedShip {
   dockUntil: number | null
   /** Day the company got the ship (for the fleet list). */
   acquiredDay: number
+  /** Freight pay earned by the ship, after contract penalties (for the year review). */
+  earned?: number
 }
 
-export type LogKind = 'arrival' | 'delivery' | 'late' | 'departure' | 'info' | 'warning' | 'bank' | 'shipyard' | 'event' | 'news'
+export type LogKind = 'arrival' | 'delivery' | 'late' | 'departure' | 'info' | 'warning' | 'bank' | 'shipyard' | 'event' | 'news' | 'award'
 
 export interface LogEntry {
   day: number
@@ -108,6 +117,51 @@ export interface Ledger {
   incidents: number
   /** Contract penalties paid for late deliveries. */
   penalties: number
+  /** Milestone prizes, rescue rewards and rush bonuses. */
+  awards: number
+}
+
+/** Running counts behind the milestones. */
+export interface CompanyStats {
+  deliveries: number
+  onTime: number
+  /** On-time deliveries in a row (a late one resets it). */
+  onTimeStreak: number
+  expressOnTime: number
+  tonnes: number
+  portsVisited: string[]
+  canalsUsed: string[]
+  rescues: number
+}
+
+export interface MilestoneDone {
+  id: string
+  day: number
+}
+
+/** Where the company stood when the calendar year began. */
+export interface YearSnapshot {
+  year: number
+  netWorth: number
+  ledger: Ledger
+  deliveries: number
+  onTime: number
+  /** Ship id → `earned` at the start of the year. */
+  shipEarned: Record<string, number>
+}
+
+export interface YearReport {
+  year: number
+  revenue: number
+  costs: number
+  netWorthStart: number
+  netWorthEnd: number
+  deliveries: number
+  onTime: number
+  bestShip: { name: string; earned: number } | null
+  /** Titles of milestones reached during the year. */
+  milestones: string[]
+  ships: number
 }
 
 export interface GameState {
@@ -135,4 +189,9 @@ export interface GameState {
   bankrupt: boolean
   pendingEvent: PendingEvent | null
   settings: Settings
+  stats: CompanyStats
+  milestones: MilestoneDone[]
+  yearStart: YearSnapshot
+  /** Finished years, oldest first. */
+  yearReports: YearReport[]
 }

@@ -74,11 +74,11 @@ describe('voyages', () => {
     s = runUntilDocked(s)
     expect(s.ships[0].portId).toBe(offer.to)
     expect(s.day).toBe(plan.arriveInDays)
-    const expected = moneyAfterDeparture + offer.pay - plan.harbourFee - plan.arriveInDays * t.dailyCost
+    const expected = moneyAfterDeparture + offer.pay + s.ledger.awards - plan.harbourFee - plan.arriveInDays * t.dailyCost
     expect(s.money).toBe(expected)
     expect(s.ledger.revenue).toBe(offer.pay)
     expect(s.ships[0].fuel).toBeGreaterThanOrEqual(0)
-    expect(s.log[0].kind).toBe('delivery')
+    expect(s.log.find((e) => e.kind !== 'award')?.kind).toBe('delivery')
   })
 
   it('buys missing fuel before leaving', () => {

@@ -21,12 +21,15 @@ export function EventDialog({ state, onChoose }: Props) {
   /** One line on schedule and money for an outcome. */
   const line = (o: Outcome) => {
     const parts: string[] = []
-    parts.push(`Perillä ${dateOf(o.arriveDay)}${o.delay ? ` (+${o.delay} pv)` : ''}`)
+    const shift = o.arriveDay - Math.ceil(v?.arriveDay ?? o.arriveDay)
+    parts.push(`Perillä ${dateOf(o.arriveDay)}${shift > 0 ? ` (+${shift} pv)` : shift < 0 ? ` (${shift} pv)` : ''}`)
     if (o.lateDays !== null) parts.push(o.lateDays > 0 ? `myöhässä ${o.lateDays} pv` : 'ajoissa')
     const money: string[] = []
     if (o.cost) money.push(`kulut ${fmtMoney(o.cost)}`)
     if (o.penalty) money.push(`sopimussakko ${fmtMoney(o.penalty)}`)
     if (o.cargoLoss) money.push(`lastivahinko −${fmtMoney(o.cargoLoss)}`)
+    if (o.fuel) money.push(`lisäpolttoaine noin ${fmtMoney(o.fuel)}`)
+    if (o.reward) money.push(`${ev.kind === 'rush' ? 'bonus' : 'palkkio'} +${fmtMoney(o.reward)}`)
     return { text: parts.join(' · '), money: money.join(' · '), bad: (o.lateDays ?? 0) > 0 }
   }
 

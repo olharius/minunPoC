@@ -12,6 +12,7 @@ const ICON: Record<LogKind, string> = {
   shipyard: '🛠️',
   event: '🌊',
   news: '📰',
+  award: '🏆',
 }
 
 export function LogList({ state, limit = 12 }: { state: GameState; limit?: number }) {

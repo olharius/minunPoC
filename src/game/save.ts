@@ -1,9 +1,11 @@
 import { dedupeShipNames } from './names'
+import { newStats } from './newGame'
 import type { GameState } from './types'
+import { snapshot, yearOfDay } from './yearReview'
 
 // Save format. Bump SAVE_VERSION and add a step to `migrate` whenever
 // GameState changes shape, so old saves keep loading.
-export const SAVE_VERSION = 5
+export const SAVE_VERSION = 6
 const STORAGE_KEY = 'minunpoc.autosave'
 
 export interface SaveFile {
@@ -65,6 +67,16 @@ function migrate(version: number, state: Record<string, unknown>): GameState {
   if (version < 5) {
     // v5: express jobs and contract penalties (old contracts get the normal penalty rate).
     s.ledger = { ...(s.ledger as object), penalties: 0 }
+  }
+  if (version < 6) {
+    // v6: milestones, year reviews and awards. Ports where ships are now count as visited.
+    s.ledger = { ...(s.ledger as object), awards: 0 }
+    const here = (s.ships as { portId: string | null }[]).map((x) => x.portId).filter((p): p is string => !!p)
+    s.stats = newStats([...new Set([s.homePortId as string, ...here])])
+    s.milestones = []
+    s.yearReports = []
+    const g = s as unknown as GameState
+    g.yearStart = snapshot(g, yearOfDay(g, g.day))
   }
   return s as unknown as GameState
 }

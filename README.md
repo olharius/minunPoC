@@ -12,7 +12,8 @@ Peli tallentuu automaattisesti selaimeen. Valikon kohdalla *Vie tallennus tiedos
 2. **Pelin ydin** (valmis): rahtimarkkina, merireitit kanavineen, matkat, polttoaine, satamamaksut, kuluva aika ja tapahtumaloki.
 3. **Varustamon kasvu** (valmis): kahdeksan laivatyyppiä, uudet ja käytetyt laivat, myynti, kuluminen ja korjaukset, pankkilaina, konkurssi sekä laivasto- ja talousnäkymä.
 4. **Pelimekaniikka** (valmis): tapahtumat merellä valintoineen, maailmanuutiset (suhdanteet ja lakot) sekä satamaan ohjaaminen minipelinä.
-5. **Myöhemmin:** pikseligrafiikka ja viimeistely.
+5. **Mielenkiintoisuus** (työn alla): virstanpylväät palkintoineen, vuosikatsaus, matkan nopeuden valinta, isommat polttoaineen hintaerot sekä uudet tapahtumat (hätämerkki, kiirebonus).
+6. **Myöhemmin:** pikseligrafiikka ja viimeistely.
 
 ## Kehittäjälle
 

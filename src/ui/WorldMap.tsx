@@ -6,7 +6,7 @@ import landTopo from 'world-atlas/land-110m.json'
 import { PORTS, type Port } from '../data/ports'
 import { getRoute, pointAlong, remainingPath, type Route } from '../data/routes'
 import type { OwnedShip, VoyageHold } from '../game/types'
-import { activeHold, voyageProgress } from '../game/voyage'
+import { activeHold, holdText, voyageProgress } from '../game/voyage'
 
 const W = 1000
 const H = 520
@@ -272,10 +272,10 @@ export function WorldMap({ ships, time, homePortId, selectedPortId, selectedShip
               </g>
               {hold && (
                 <g transform={`translate(0,${-14 / k}) scale(${1 / k})`} className="hold-badge">
-                  <title>{hold.reason === 'pirates' ? 'Merirosvojen hallussa' : 'Korjaus käynnissä'}</title>
+                  <title>{holdText(hold, time)}</title>
                   <rect x={-17} y={-9} width={34} height={14} rx={7} />
                   <text y={2} textAnchor="middle">
-                    {hold.reason === 'pirates' ? '☠' : '🔧'} {Math.max(1, Math.ceil(hold.until - time))}
+                    {hold.reason === 'pirates' ? '☠' : hold.reason === 'rescue' ? '🛟' : '🔧'} {Math.max(1, Math.ceil(hold.until - time))}
                   </text>
                 </g>
               )}

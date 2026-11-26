@@ -176,3 +176,8 @@ export function finishRepairs(s: GameState) {
     }
   }
 }
+
+/** Cash plus fleet value minus the loan: what the company is worth. */
+export function netWorth(state: GameState): number {
+  return state.money + fleetValue(state) - state.loan
+}
