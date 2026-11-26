@@ -5,6 +5,7 @@ import { MARKET_WEEK } from './calendar'
 import { fuelForVoyage, voyageEstimate } from './economy'
 import { captainMods } from './captains'
 import { canRepairAt, repairQuote, startRepair } from './fleet'
+import { portOpen } from './timeline'
 import { offerFits, portOffers } from './market'
 import { depart } from './sim'
 import { addLog as log, clone, getShip } from './state'
@@ -62,13 +63,13 @@ export function bestOffer(s: GameState, ship: OwnedShip, orders: ShipOrders): Or
 }
 
 /** Where to sail empty: the nearest area port, preferring big ones when the ship is already inside. */
-function repositionTarget(ship: OwnedShip, orders: ShipOrders): string | null {
+function repositionTarget(s: GameState, ship: OwnedShip, orders: ShipOrders): string | null {
   const from = ship.portId!
   const t = getShipType(ship.typeId)
   const m = captainMods(ship)
   const inside = inArea(orders, from)
   const options = PORTS.filter(
-    (p) => p.id !== from && inArea(orders, p.id) && fuelForVoyage(getRoute(from, p.id).nm, t, ship.condition, orders.pace, m) <= t.fuelCapacity,
+    (p) => p.id !== from && portOpen(p, s.day) && inArea(orders, p.id) && fuelForVoyage(getRoute(from, p.id).nm, t, ship.condition, orders.pace, m) <= t.fuelCapacity,
   )
   if (!options.length) return null
   // Inside the area: try a busy port nearby. Outside: just get back in.
@@ -103,7 +104,7 @@ function nextJob(s: GameState, ship: OwnedShip, orders: ShipOrders): GameState {
 
   const waited = orders.waitingSince !== undefined ? s.day - orders.waitingSince : 0
   if (!inArea(orders, portId) || waited >= MARKET_WEEK) {
-    const to = repositionTarget(ship, orders)
+    const to = repositionTarget(s, ship, orders)
     if (to) return depart(s, ship.id, to, null, orders.pace)
   }
   if (orders.waitingSince === undefined) {

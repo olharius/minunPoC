@@ -103,7 +103,7 @@ describe('new events', () => {
     s = resolveEvent(s, 'rush')
     expect(s.ships[0].voyage?.pace).toBe('full')
     const money = s.money
-    for (let i = 0; i < 40 && s.ships[0].voyage; i++) s = advanceDay({ ...s, ships: s.ships.map((x) => (x.voyage ? { ...x, voyage: { ...x.voyage, events: ['storm', 'engine', 'pirates', 'rescue', 'rush'] } } : x)) })
+    for (let i = 0; i < 40 && s.ships[0].voyage; i++) s = advanceDay({ ...s, ships: s.ships.map((x) => (x.voyage ? { ...x, voyage: { ...x.voyage, events: ['storm', 'engine', 'pirates', 'rescue', 'rush', 'ice', 'medical'] } } : x)) })
     expect(s.ships[0].portId).toBe('newyork')
     expect(s.log.some((e) => e.kind === 'award' && e.amount === offer.bonus)).toBe(true)
     expect(s.money).toBeGreaterThan(money)

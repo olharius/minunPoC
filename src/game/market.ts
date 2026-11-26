@@ -1,10 +1,12 @@
 import { CARGO_TYPES, type CargoType } from '../data/cargoTypes'
-import { getPort, PORTS, type Port } from '../data/ports'
+import { getPort, type Port } from '../data/ports'
 import { getRoute } from '../data/routes'
 import type { CargoClass, ShipType } from '../data/shipTypes'
 import { tradeOf } from '../data/trade'
 import { MARKET_WEEK, monthOf } from './calendar'
 import { inRange, penaltyPerDay } from './economy'
+import { activeEras, containerLotMax, eraPayFactor, openPorts, portOpen } from './timeline'
+import { yearAt } from './calendar'
 import { cargoFactor, portOnStrike } from './news'
 import { hashString, rng } from './rng'
 import type { Contract, GameState, OwnedShip } from './types'
@@ -106,7 +108,9 @@ const boardCache = new Map<string, readonly Contract[]>()
 const BOARD_CACHE_SIZE = 64
 
 function weekBoard(state: Pick<GameState, 'seed' | 'day'>, portId: string): readonly Contract[] {
-  const key = `${state.seed}:${portId}:${marketWeek(state.day)}:${monthOf(state.day)}`
+  // Eras and the year (new ports, bigger lots) change offers too.
+  const eras = activeEras(state.day).map((e) => e.id).join(',')
+  const key = `${state.seed}:${portId}:${marketWeek(state.day)}:${monthOf(state.day)}:${yearAt(state.day)}:${eras}`
   let board = boardCache.get(key)
   if (!board) {
     board = drawBoard(state, portId)
@@ -119,11 +123,12 @@ function weekBoard(state: Pick<GameState, 'seed' | 'day'>, portId: string): read
 function drawBoard(state: Pick<GameState, 'seed' | 'day'>, portId: string): readonly Contract[] {
   const week = marketWeek(state.day)
   const port = getPort(portId)
+  if (!portOpen(port, state.day)) return []
   const r = rng(hashString(`${state.seed}:market:${portId}:${week}`))
   const count = 3 + port.size * 3
   const startDay = week * MARKET_WEEK
   const offers: Contract[] = []
-  const dests = PORTS.filter((p) => p.id !== portId)
+  const dests = openPorts(state.day).filter((p) => p.id !== portId)
 
   // Every board starts with two regional general-cargo jobs, so a small ship always finds work.
   // Which cargo turns up follows the port's exports, where it goes the
@@ -137,11 +142,11 @@ function drawBoard(state: Pick<GameState, 'seed' | 'day'>, portId: string): read
     const cls = cargo.cargoClass
     const dest = r.pick(starter ? regional : dests, (p) => destWeight(p, cargo.id))
     const nm = getRoute(portId, dest.id).nm
-    const [lo, hi] = starter ? [1500, 6000] : LOT[cls]
+    const [lo, hi] = starter ? [1500, 6000] : cls === 'container' ? [LOT.container[0], containerLotMax(state.day)] : LOT[cls]
     // Skewed towards smaller lots; big lots are rarer.
     const tonnes = Math.round((lo + (hi - lo) * r.next() ** 1.6) / 100) * 100
     const express = !starter && r.next() < EXPRESS_SHARE
-    const rate = r.range(0.85, 1.25) * (0.9 + port.size * 0.05) * cargoFactor(state, cargo.id)
+    const rate = r.range(0.85, 1.25) * (0.9 + port.size * 0.05) * cargoFactor(state, cargo.id) * eraPayFactor(state.day, cargo.id, portId)
     const pay = freightPay(cargo, tonnes, nm, express ? rate * r.range(1.4, 1.7) : rate)
     const deadlineDay = express
       ? // Only a few days' slack for a 14-knot ship that leaves at once.

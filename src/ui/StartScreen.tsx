@@ -19,7 +19,7 @@ export function StartScreen({ autosave, onStart }: Props) {
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const sortedPorts = [...PORTS].sort((a, b) => a.name.localeCompare(b.name, 'fi'))
+  const sortedPorts = PORTS.filter((p) => !p.openFrom).sort((a, b) => a.name.localeCompare(b.name, 'fi'))
 
   return (
     <div className="start">

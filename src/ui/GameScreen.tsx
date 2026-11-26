@@ -15,6 +15,7 @@ import { DockingGame } from './DockingGame'
 import { EventDialog } from './EventDialog'
 import { resolveEvent } from '../game/events'
 import { currentNews } from '../game/news'
+import { activeEras } from '../game/timeline'
 import { applyDocking } from '../game/sim'
 import { FinancePanel } from './panels/FinancePanel'
 import { FleetPanel } from './panels/FleetPanel'
@@ -245,8 +246,13 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
             />
           ) : (
             <>
-              {currentNews(state).length > 0 && (
+              {(currentNews(state).length > 0 || activeEras(state.day).length > 0) && (
                 <div className="news" aria-label="Uutiset">
+                  {activeEras(state.day).map((e) => (
+                    <div key={e.id}>
+                      🌍 <strong>{e.title}:</strong> {e.text}
+                    </div>
+                  ))}
                   {currentNews(state).map((n) => (
                     <div key={n.text}>📰 {n.text}</div>
                   ))}

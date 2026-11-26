@@ -1,7 +1,8 @@
 import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
 import { getShipType } from '../data/shipTypes'
-import { effectiveFuelPerDay, fuelPrice, harbourFee, latePenalty, paceInfo, penaltyPerDay, planVoyage, type Pace } from './economy'
+import { effectiveFuelPerDay, fuelPrice, harbourFee, latePenalty, paceInfo, penaltyPerDay, planVoyage, sizeFactor, type Pace } from './economy'
+import { hashString, rng } from './rng'
 import { fmtMoney, fmtNum } from './format'
 import { getCargo, marketWeek, offerFits, portOffers } from './market'
 import { monthEnd } from './bank'
@@ -16,6 +17,7 @@ import { addLog as log, clone, getShip as shipOf } from './state'
 import type { Contract, GameState, OwnedShip } from './types'
 import { sailingTime } from './voyage'
 import { closeYear } from './yearReview'
+import { portOpen, timelineNews } from './timeline'
 
 // All game rules that change state live here. Each function returns a new
 // state (the old one is never mutated), so React re-renders and autosave work.
@@ -41,6 +43,7 @@ export function refuel(state: GameState, shipId: string, tonnes?: number): GameS
 
 /** Send a ship to `to`, optionally carrying a contract. Buys missing fuel automatically. */
 export function depart(state: GameState, shipId: string, to: string, contract: Contract | null = null, pace: Pace = 'normal'): GameState {
+  if (!portOpen(getPort(to), state.day)) throw new Error('Satama ei ole vielä avoinna.')
   const plan = planVoyage(state, shipId, to, pace)
   const before = shipOf(state, shipId)
   const t = getShipType(before.typeId)
@@ -122,6 +125,7 @@ export function advanceDay(state: GameState): GameState {
 
 function finishDay(s: GameState, moneyBefore: number): GameState {
   if (s.day % MONTH === 0) for (const n of monthNews(s, s.day / MONTH)) log(s, { kind: 'news', text: n.text })
+  for (const text of timelineNews(s.day)) log(s, { kind: 'news', text })
 
   if (moneyBefore >= 0 && s.money < 0) {
     log(s, { kind: 'warning', text: 'Kassa on miinuksella! Kuun lopussa pankki kattaa vajeen lainalla, jos luottoa on jäljellä.' })
@@ -143,6 +147,7 @@ function arrive(s: GameState, ship: OwnedShip) {
   s.ledger.harbour += fee
   log(s, { kind: 'arrival', text: `${ship.name} saapui satamaan ${port.name}. Satamamaksu.`, amount: -fee })
   if (!s.stats.portsVisited.includes(port.id)) s.stats.portsVisited = [...s.stats.portsVisited, port.id]
+  portInspection(s, ship)
   const c = v.contract
   if (!c) return
   const late = s.day - c.deadlineDay
@@ -195,6 +200,25 @@ function arrive(s: GameState, ship: OwnedShip) {
   } else {
     log(s, { kind: 'delivery', text: `${kind}${ship.name} toimitti ${fmtNum(c.tonnes)} t ${cargo} ajallaan.`, amount: pay })
   }
+}
+
+/** Worn below this, port state control may fine the ship on arrival. */
+export const INSPECTION_BELOW = 50
+export const P_INSPECTION_FINE = 0.5
+
+/** Port state control: a badly worn ship risks a fine when it docks. Mutates `s`. */
+function portInspection(s: GameState, ship: OwnedShip) {
+  if (ship.condition >= INSPECTION_BELOW) return
+  const r = rng(hashString(`${s.seed}:inspect:${ship.id}:${s.day}`))
+  if (r.next() >= P_INSPECTION_FINE) return
+  const fine = Math.round((25_000 * sizeFactor(getShipType(ship.typeId))) / 1000) * 1000
+  s.money -= fine
+  s.ledger.incidents += fine
+  log(s, {
+    kind: 'warning',
+    text: `Satamavaltion tarkastajat löysivät laivasta ${ship.name} puutteita (kunto ${Math.round(ship.condition)} %). Sakko. Korjaa laiva telakalla.`,
+    amount: -fine,
+  })
 }
 
 /** Ships that docked between two states (for pausing / notifications). */

@@ -21,7 +21,7 @@ function withEvent(s: GameState, kind: 'engine' | 'pirates' | 'storm'): GameStat
 /** A day without new events, so a test sees only the effect it set up. */
 function calmDay(s: GameState): GameState {
   const v = s.ships[0].voyage!
-  return advanceDay({ ...s, ships: [{ ...s.ships[0], voyage: { ...v, events: ['storm', 'engine', 'pirates', 'rescue', 'rush'] } }, ...s.ships.slice(1)] })
+  return advanceDay({ ...s, ships: [{ ...s.ships[0], voyage: { ...v, events: ['storm', 'engine', 'pirates', 'rescue', 'rush', 'ice', 'medical'] } }, ...s.ships.slice(1)] })
 }
 
 function untilEvent(s: GameState, max = 60): GameState {

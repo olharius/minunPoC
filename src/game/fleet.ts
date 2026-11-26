@@ -1,6 +1,7 @@
 import { getPort, PORTS } from '../data/ports'
-import { getShipType, SHIP_TYPES, type ShipType } from '../data/shipTypes'
+import { getShipType, type ShipType } from '../data/shipTypes'
 import { monthOf } from './calendar'
+import { availableShipTypes, portOpen, shipTypeAvailable } from './timeline'
 import { fmtMoney } from './format'
 import { fleetNameKeys, isNameTaken, nameKey, uniqueName } from './names'
 import { hashString, rng } from './rng'
@@ -54,14 +55,14 @@ const USED_NAMES = [
 /** Second-hand ships for sale at a port this month. */
 export function usedListings(state: GameState, portId: string): Listing[] {
   const p = getPort(portId)
-  if (p.size < 2) return []
+  if (p.size < 2 || !portOpen(p, state.day)) return []
   const month = monthOf(state.day)
   const r = rng(hashString(`${state.seed}:used:${portId}:${month}`))
   const out: Listing[] = []
   // Suggested names never clash with the fleet or with each other.
   const names = fleetNameKeys(state)
   for (let i = 0; i < p.size; i++) {
-    const t = r.pick(SHIP_TYPES, (x) => 1 / Math.sqrt(x.price))
+    const t = r.pick(availableShipTypes(state.day), (x) => 1 / Math.sqrt(x.price))
     const condition = Math.round(r.range(40, 88))
     const price = Math.round((t.price * (0.25 + 0.6 * (condition / 100)) * r.range(0.9, 1.1)) / 10000) * 10000
     const name = uniqueName(r.pick(USED_NAMES), names)
@@ -117,6 +118,7 @@ export function buyNewShip(state: GameState, portId: string, typeId: string, nam
   checkShipName(state, name)
   const s = clone(state)
   const t = getShipType(typeId)
+  if (!shipTypeAvailable(t, s.day)) throw new Error('Tätä laivatyyppiä ei vielä rakenneta.')
   pay(s, t.price)
   const ship = addShip(s, t, name, portId, 100)
   log(s, { kind: 'shipyard', text: `Ostettiin uusi ${t.name.toLowerCase()} ${ship.name} (${getPort(portId).name}).`, amount: -t.price })

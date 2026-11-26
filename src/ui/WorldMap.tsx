@@ -7,6 +7,8 @@ import { PORTS, type Port } from '../data/ports'
 import { getRoute, pointAlong, remainingPath, type Route } from '../data/routes'
 import type { OwnedShip, VoyageHold } from '../game/types'
 import { activeHold, holdText, voyageProgress } from '../game/voyage'
+import { dayOfDate, yearAt } from '../game/calendar'
+import { portOpen } from '../game/timeline'
 
 const W = 1000
 const H = 520
@@ -126,13 +128,16 @@ export function WorldMap({ ships, time, homePortId, selectedPortId, selectedShip
     return [v.x + ((clientX - r.left) / r.width) * v.w, v.y + ((clientY - r.top) / r.height) * vh]
   }
 
+  const year = yearAt(time)
+  const visiblePorts = useMemo(() => PORTS.filter((p) => portOpen(p, dayOfDate(year))), [year])
+
   // Greedy label placement: important ports first, skip labels that would overlap.
   const labelled = useMemo(() => {
     const prio = (p: Port) =>
       (p.id === selectedPortId ? 100 : 0) + (p.id === homePortId ? 50 : 0) + (shipsByPort.has(p.id) ? 20 : 0) + p.size
     const placed: [number, number, number, number][] = []
     const out = new Set<string>()
-    for (const p of [...PORTS].sort((a, b) => prio(b) - prio(a))) {
+    for (const p of [...visiblePorts].sort((a, b) => prio(b) - prio(a))) {
       const [x, y] = project(p)
       const sx = x * k
       const sy = y * k
@@ -143,7 +148,7 @@ export function WorldMap({ ships, time, homePortId, selectedPortId, selectedShip
       out.add(p.id)
     }
     return out
-  }, [k, selectedPortId, homePortId, shipsByPort])
+  }, [k, selectedPortId, homePortId, shipsByPort, visiblePorts])
 
   return (
     <div className="map-wrap" ref={wrapRef}>
@@ -211,7 +216,7 @@ export function WorldMap({ ships, time, homePortId, selectedPortId, selectedShip
         ))}
         {preview && <path d={lineD(preview.path)} className="route preview" pointerEvents="none" />}
 
-        {PORTS.map((p) => {
+        {visiblePorts.map((p) => {
           const [x, y] = project(p)
           const here = shipsByPort.get(p.id) ?? []
           const selected = p.id === selectedPortId
@@ -275,7 +280,7 @@ export function WorldMap({ ships, time, homePortId, selectedPortId, selectedShip
                   <title>{holdText(hold, time)}</title>
                   <rect x={-17} y={-9} width={34} height={14} rx={7} />
                   <text y={2} textAnchor="middle">
-                    {hold.reason === 'pirates' ? '☠' : hold.reason === 'rescue' ? '🛟' : '🔧'} {Math.max(1, Math.ceil(hold.until - time))}
+                    {hold.reason === 'pirates' ? '☠' : hold.reason === 'rescue' ? '🛟' : hold.reason === 'ice' ? '🧊' : '🔧'} {Math.max(1, Math.ceil(hold.until - time))}
                   </text>
                 </g>
               )}

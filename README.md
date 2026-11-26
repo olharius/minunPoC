@@ -12,7 +12,7 @@ Peli tallentuu automaattisesti selaimeen. Valikon kohdalla *Vie tallennus tiedos
 2. **Pelin ydin** (valmis): rahtimarkkina, merireitit kanavineen, matkat, polttoaine, satamamaksut, kuluva aika ja tapahtumaloki.
 3. **Varustamon kasvu** (valmis): kahdeksan laivatyyppiä, uudet ja käytetyt laivat, myynti, kuluminen ja korjaukset, pankkilaina, konkurssi sekä laivasto- ja talousnäkymä.
 4. **Pelimekaniikka** (valmis): tapahtumat merellä valintoineen, maailmanuutiset (suhdanteet ja lakot) sekä satamaan ohjaaminen minipelinä.
-5. **Mielenkiintoisuus** (työn alla): virstanpylväät palkintoineen, vuosikatsaus, matkan nopeuden valinta, isommat polttoaineen hintaerot sekä uudet tapahtumat (hätämerkki, kiirebonus). Laivaston hallinta: automaattiohjaus toiminta-alueineen ja kapteenit erikoistaitoineen.
+5. **Mielenkiintoisuus** (työn alla): virstanpylväät palkintoineen, vuosikatsaus, matkan nopeuden valinta, isommat polttoaineen hintaerot sekä uudet tapahtumat (hätämerkki, kiirebonus). Laivaston hallinta: automaattiohjaus toiminta-alueineen ja kapteenit erikoistaitoineen. Elävämpi maailma: 49 satamaa, aikajana vuodesta 1990 (talouden aikakaudet, uudet satamat ja laivatyypit) sekä lisää tapahtumia.
 6. **Myöhemmin:** pikseligrafiikka ja viimeistely.
 
 ## Kehittäjälle
@@ -27,7 +27,8 @@ npm run routes  # laske merireitit uudelleen (satamien lisäämisen jälkeen)
 
 Pelin sisältö on datatiedostoissa, joten sitä voi laajentaa koskematta pelilogiikkaan:
 
-- `src/data/ports.ts`: satamat
+- `src/data/ports.ts`: satamat (uusi satama tarvitsee myös rivin `src/data/trade.ts`-tiedostoon ja `npm run routes` -ajon; `openFrom` avaa sataman myöhemmin)
+- `src/game/timeline.ts`: talouden aikakaudet vuodesta 1990
 - `src/data/shipTypes.ts`: laivatyypit
 - `src/data/cargoTypes.ts`: lastityypit
 - `src/data/canals.ts`: kanavat ja niiden maksut

@@ -1,6 +1,6 @@
 import { CARGO_TYPES } from '../data/cargoTypes'
-import { PORTS } from '../data/ports'
-import { monthOf } from './calendar'
+import { openPorts } from './timeline'
+import { MONTH, monthOf } from './calendar'
 import { hashString, rng } from './rng'
 import type { GameState } from './types'
 
@@ -63,7 +63,7 @@ function rollNews(seed: number, month: number): readonly News[] {
       used.add(c.id)
       out.push({ kind: 'slump', cargoId: c.id, factor: 0.7, text: `Ylitarjontaa markkinoilla: ${c.name.toLowerCase()}rahtien hinnat laskevat.` })
     } else {
-      const p = r.pick(PORTS)
+      const p = r.pick(openPorts(month * MONTH))
       out.push({ kind: 'strike', portId: p.id, text: `Satamatyöläiset lakossa: ${p.name}. Ei uusia rahteja, ja satamamaksut ovat kaksinkertaiset.` })
     }
   }

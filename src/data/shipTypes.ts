@@ -19,6 +19,8 @@ export interface ShipType {
   dailyCost: number
   /** New-build price, dollars. */
   price: number
+  /** Year the type first comes on the market; missing = from the start. */
+  availableFrom?: number
 }
 
 export const SHIP_TYPES: ShipType[] = [
@@ -117,6 +119,45 @@ export const SHIP_TYPES: ShipType[] = [
     fuelCapacity: 3500,
     dailyCost: 13500,
     price: 48_000_000,
+  },
+  {
+    id: 'post-panamax-container',
+    name: 'Post-Panamax-konttialus',
+    description: 'Liian leveä Panaman kanavaan, mutta valtava ja nopea. Kantaa uudet jättikonttierät.',
+    cargoClass: 'container',
+    capacity: 60000,
+    speed: 24,
+    fuelPerDay: 110,
+    fuelCapacity: 7000,
+    dailyCost: 21000,
+    price: 85_000_000,
+    availableFrom: 1996,
+  },
+  {
+    id: 'supramax',
+    name: 'Supramax-irtolastialus',
+    description: 'Omilla nostureilla varustettu moderni irtolastialus. Lähes Panamaxin kokoinen, mutta selvästi säästeliäämpi.',
+    cargoClass: 'bulk',
+    capacity: 55000,
+    speed: 14.5,
+    fuelPerDay: 27,
+    fuelCapacity: 2400,
+    dailyCost: 8500,
+    price: 28_000_000,
+    availableFrom: 2001,
+  },
+  {
+    id: 'eco-coaster',
+    name: 'Ekorannikkorahtilaiva',
+    description: 'Uuden sukupolven pieni yleisrahtilaiva: vähän isompi ja nopeampi kuin vanha rannikkorahtilaiva, mutta kuluttaa vähemmän.',
+    cargoClass: 'general',
+    capacity: 8000,
+    speed: 13,
+    fuelPerDay: 10,
+    fuelCapacity: 600,
+    dailyCost: 3600,
+    price: 7_000_000,
+    availableFrom: 2004,
   },
 ]
 
