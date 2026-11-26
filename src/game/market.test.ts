@@ -71,7 +71,7 @@ describe('trade-based offers', () => {
   })
 
   it('still offers general cargo everywhere', () => {
-    for (const p of PORTS) {
+    for (const p of PORTS.filter((x) => !x.openFrom)) {
       const general = sample(p.id, 20).filter((o) => getCargo(o.cargoId).cargoClass === 'general')
       expect(general.length, p.id).toBeGreaterThan(20)
     }
@@ -79,7 +79,7 @@ describe('trade-based offers', () => {
 
   it('sends cargo mostly to ports that import it', () => {
     const ore = sample('sydney', 120).filter((o) => o.cargoId === 'iron-ore')
-    const toImporters = ore.filter((o) => ['shanghai', 'yokohama', 'rotterdam', 'hamburg', 'genoa'].includes(o.to)).length
+    const toImporters = ore.filter((o) => ['shanghai', 'yokohama', 'busan', 'rotterdam', 'hamburg', 'antwerp', 'genoa', 'istanbul'].includes(o.to)).length
     expect(toImporters / ore.length).toBeGreaterThan(0.5)
   })
 })

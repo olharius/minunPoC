@@ -6,6 +6,7 @@ import { portOnStrike } from './news'
 import { hashString, rng } from './rng'
 import { captainMods, NO_MODS, shipDailyCost, type ShipMods } from './captains'
 import { getShip } from './state'
+import { eraFuelFactor } from './timeline'
 import type { Contract, GameState, Pace } from './types'
 
 import { MONTH, monthOf } from './calendar'
@@ -45,7 +46,7 @@ export function fuelPrice(state: Pick<GameState, 'seed' | 'day'>, portId: string
   const swing = rng(hashString(`${state.seed}:fuel:${month}`)).range(0.85, 1.2)
   // Local prices move a lot from month to month, so where to fill up matters.
   const local = rng(hashString(`${state.seed}:fuel:${portId}:${month}`)).range(0.85, 1.2)
-  return Math.round(base * swing * local)
+  return Math.round(base * swing * local * eraFuelFactor(state.day))
 }
 
 /** Average bunker price over all ports this month (to tell cheap from dear). */

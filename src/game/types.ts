@@ -49,7 +49,7 @@ export interface Voyage {
 export interface VoyageHold {
   from: number
   until: number
-  reason: 'repair' | 'service' | 'pirates' | 'rescue'
+  reason: 'repair' | 'service' | 'pirates' | 'rescue' | 'ice'
 }
 
 export interface EventOption {
@@ -60,7 +60,7 @@ export interface EventOption {
 
 /** A decision waiting for the player; time stops until it is answered. */
 export interface PendingEvent {
-  kind: 'storm' | 'engine' | 'pirates' | 'rescue' | 'rush'
+  kind: 'storm' | 'engine' | 'pirates' | 'rescue' | 'rush' | 'ice' | 'medical'
   shipId: string
   day: number
   title: string

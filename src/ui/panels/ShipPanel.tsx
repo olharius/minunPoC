@@ -66,7 +66,7 @@ export function ShipPanel({ state, shipId, time, onClose, onSelectPort, onOrders
               {getPort(v.to).name}
             </button>
           </div>
-          {hold && <div className="hold-note">{hold.reason === 'pirates' ? '☠' : hold.reason === 'rescue' ? '🛟' : '🔧'} {holdText(hold, time)}</div>}
+          {hold && <div className="hold-note">{hold.reason === 'pirates' ? '☠' : hold.reason === 'rescue' ? '🛟' : hold.reason === 'ice' ? '🧊' : '🔧'} {holdText(hold, time)}</div>}
           <div className="progress">
             <div style={{ width: `${progress * 100}%` }} />
           </div>

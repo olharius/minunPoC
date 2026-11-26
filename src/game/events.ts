@@ -19,6 +19,9 @@ const P_PIRATES = 0.05 // per day inside a risk area
 const P_TAILWIND = 0.01
 const P_RESCUE = 0.004
 const P_RUSH = 0.008
+const P_MEDICAL = 0.003
+/** Per day on the final stretch into an icy port in winter. */
+const P_ICE = 0.35
 
 /** Delays and costs of each choice (also shown to the player before choosing). */
 export const STORM_DETOUR_DAYS = 2
@@ -32,6 +35,20 @@ export const RESCUE_DAYS = 1
 export const RESCUE_REWARD = 60_000
 /** Rush bonus as a share of the freight pay. */
 export const RUSH_BONUS = 0.12
+export const MEDEVAC_COST = 35_000
+export const P_ILLNESS_WORSE = 0.3
+export const ILLNESS_DAYS = 2
+export const ILLNESS_COST = 15_000
+export const ICE_WAIT_DAYS = 3
+
+/** Ports where winter ice can close the approach (Dec–Mar). */
+export const ICY_PORTS = new Set(['helsinki', 'stpetersburg'])
+
+/** Is it ice season on this game day? */
+export function iceSeason(day: number): boolean {
+  const m = new Date(Date.UTC(1990, 0, 1) + Math.floor(day) * 86_400_000).getUTCMonth()
+  return m === 11 || m <= 2
+}
 
 /** Waters with a piracy risk: [lonMin, latMin, lonMax, latMax]. */
 export const PIRATE_ZONES: { name: string; box: [number, number, number, number] }[] = [
@@ -166,6 +183,35 @@ export function rollSeaEvents(s: GameState) {
       }
       continue
     }
+    if (!seen.has('ice') && ICY_PORTS.has(v.to) && iceSeason(s.day) && v.arriveDay - s.day < 3 && r.next() < P_ICE) {
+      const fee = costFor(ship, 20000)
+      s.pendingEvent = {
+        kind: 'ice',
+        shipId: ship.id,
+        day: s.day,
+        title: 'Jäätä edessä',
+        text: `Satamaan johtava väylä on jäässä. ${ship.name} ei pääse etenemään omin voimin.`,
+        options: [
+          { id: 'icebreaker', label: `Tilaa jäänmurtaja-avustus (${fmtMoney(fee)})`, detail: 'Jäänmurtaja avaa väylän heti.' },
+          { id: 'wait', label: `Odota jäiden heikkenemistä (+${ICE_WAIT_DAYS} päivää)`, detail: 'Ilmaista, mutta laiva seisoo jäissä päiväkausia.' },
+        ],
+      }
+      continue
+    }
+    if (!seen.has('medical') && r.next() < P_MEDICAL) {
+      s.pendingEvent = {
+        kind: 'medical',
+        shipId: ship.id,
+        day: s.day,
+        title: 'Sairastunut merimies',
+        text: `Laivan ${ship.name} matruusi on sairastunut vakavasti. Laivan lääkintävarustus riittää ehkä, mutta varmaa se ei ole.`,
+        options: [
+          { id: 'evac', label: `Helikopterievakuointi (${fmtMoney(MEDEVAC_COST)})`, detail: 'Potilas pääsee heti sairaalaan. Matka jatkuu ilman viivettä.' },
+          { id: 'treat', label: 'Hoidetaan laivalla', detail: 'Ilmaista, mutta jos tila pahenee, laiva joutuu poikkeamaan reitiltä.' },
+        ],
+      }
+      continue
+    }
     const rush = rushOffer(s, ship)
     if (rush && !seen.has('rush') && r.next() < P_RUSH) {
       const c = v.contract!
@@ -249,6 +295,22 @@ export function resolveEvent(state: GameState, optionId: string): GameState {
     } else {
       log(s, { kind: 'event', text: `${ship.name} ilmoitti hätämerkistä meripelastukselle ja jatkoi matkaa.` })
     }
+  } else if (ev.kind === 'ice') {
+    if (optionId === 'icebreaker') {
+      spend(costFor(ship, 20000), `Jäänmurtaja avasi väylän laivalle ${ship.name}.`)
+    } else {
+      holdShip(v, s.day, ICE_WAIT_DAYS, 'ice')
+      log(s, { kind: 'event', text: `${ship.name} odottaa jäissä ${ICE_WAIT_DAYS} päivää.` })
+    }
+  } else if (ev.kind === 'medical') {
+    if (optionId === 'evac') {
+      spend(MEDEVAC_COST, `Helikopteri haki sairastuneen matruusin laivalta ${ship.name}.`)
+    } else if (r.next() < P_ILLNESS_WORSE) {
+      shiftArrival(ship, s.day, ILLNESS_DAYS)
+      spend(ILLNESS_COST, `Matruusin tila paheni. ${ship.name} poikkesi lähimpään satamaan, ja matka viivästyy ${ILLNESS_DAYS} päivää.`)
+    } else {
+      log(s, { kind: 'event', text: `Laivan ${ship.name} matruusi toipui laivalla.` })
+    }
   } else if (ev.kind === 'rush') {
     const rush = rushOffer(state, state.ships.find((x) => x.id === ship.id)!)
     if (optionId === 'rush' && rush) {
@@ -328,6 +390,14 @@ export function eventOutlook(s: GameState): { ship: OwnedShip; options: OptionOu
         return { optionId: o.id, sure: outcome(0, costFor(ship, 40000)) }
       case 'pirates:risk':
         return { optionId: o.id, sure: outcome(0), risk: { chance: P_HIJACK * captainMods(ship).hijack, outcome: outcome(RANSOM_DAYS, ransom) } }
+      case 'ice:icebreaker':
+        return { optionId: o.id, sure: outcome(0, costFor(ship, 20000)) }
+      case 'ice:wait':
+        return { optionId: o.id, sure: outcome(ICE_WAIT_DAYS) }
+      case 'medical:evac':
+        return { optionId: o.id, sure: outcome(0, MEDEVAC_COST) }
+      case 'medical:treat':
+        return { optionId: o.id, sure: outcome(0), risk: { chance: P_ILLNESS_WORSE, outcome: outcome(ILLNESS_DAYS, ILLNESS_COST) } }
       case 'rescue:help':
         return { optionId: o.id, sure: outcome(RESCUE_DAYS, 0, 0, RESCUE_REWARD) }
       case 'rush:rush':

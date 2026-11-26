@@ -1,4 +1,5 @@
 import { getShipType } from '../data/shipTypes'
+import { START_DATE } from './calendar'
 import type { GameState } from './types'
 import { snapshot } from './yearReview'
 
@@ -11,7 +12,7 @@ export function newGame(companyName: string, homePortId: string, shipName: strin
     companyName: companyName.trim() || 'Nimetön Varustamo',
     homePortId,
     day: 0,
-    startDate: '1990-01-01',
+    startDate: START_DATE,
     money: STARTING_MONEY,
     ships: [
       {

@@ -40,7 +40,7 @@ export function sailingTime(v: Voyage, a: number, b: number): number {
 export function holdText(h: VoyageHold, time: number): string {
   const left = Math.max(1, Math.ceil(h.until - time))
   const what =
-    h.reason === 'pirates' ? 'Merirosvojen hallussa' : h.reason === 'service' ? 'Huoltoalus korjaa konetta' : h.reason === 'rescue' ? 'Pelastustehtävä' : 'Korjaus käynnissä'
+    h.reason === 'pirates' ? 'Merirosvojen hallussa' : h.reason === 'service' ? 'Huoltoalus korjaa konetta' : h.reason === 'rescue' ? 'Pelastustehtävä' : h.reason === 'ice' ? 'Jäissä' : 'Korjaus käynnissä'
   return `${what}, ${left} pv`
 }
 

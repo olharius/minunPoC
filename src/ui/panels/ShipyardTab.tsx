@@ -1,5 +1,5 @@
-import { PORTS } from '../../data/ports'
-import { getShipType, SHIP_TYPES, type ShipType } from '../../data/shipTypes'
+import { getShipType, type ShipType } from '../../data/shipTypes'
+import { availableShipTypes, openPorts } from '../../game/timeline'
 import { creditAvailable } from '../../game/bank'
 import { sellsNewShips, usedListings } from '../../game/fleet'
 import { fmtMoney, fmtNum } from '../../game/format'
@@ -23,7 +23,7 @@ export function ShipyardTab({ state, portId, onBuyNew, onBuyUsed }: Props) {
   const used = usedListings(state, portId)
   const newHere = sellsNewShips(portId)
   const buyingPower = state.money + creditAvailable(state)
-  const hubs = PORTS.filter((p) => sellsNewShips(p.id))
+  const hubs = openPorts(state.day).filter((p) => sellsNewShips(p.id))
     .map((p) => p.name)
     .join(', ')
 
@@ -62,7 +62,7 @@ export function ShipyardTab({ state, portId, onBuyNew, onBuyUsed }: Props) {
         <p className="hint">Uusia laivoja myydään suurissa satamissa: {hubs}.</p>
       ) : (
         <ul className="offers">
-          {SHIP_TYPES.map((t) => (
+          {availableShipTypes(state.day).map((t) => (
             <li key={t.id} className="offer">
               <div className="offer-top">
                 <span>{t.name}</span>

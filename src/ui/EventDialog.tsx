@@ -81,7 +81,7 @@ export function EventDialog({ state, onChoose }: Props) {
                 )}
                 {risk && ol?.risk && (
                   <span className={`outlook${risk.bad ? ' late' : ''} risky`}>
-                    {ev.kind === 'pirates' ? 'Jos laiva kaapataan' : 'Jos myrsky vaurioittaa'} ({Math.round(ol.risk.chance * 100)} %): {risk.text}
+                    {ev.kind === 'pirates' ? 'Jos laiva kaapataan' : ev.kind === 'medical' ? 'Jos tila pahenee' : 'Jos myrsky vaurioittaa'} ({Math.round(ol.risk.chance * 100)} %): {risk.text}
                     {risk.money && ` · ${risk.money}`}
                   </span>
                 )}

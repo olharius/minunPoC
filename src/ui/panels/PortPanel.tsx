@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { PORTS, getPort } from '../../data/ports'
+import { getPort } from '../../data/ports'
+import { openPorts } from '../../game/timeline'
 import { getRoute } from '../../data/routes'
 import { getShipType } from '../../data/shipTypes'
 import { mainExports, mainImports } from '../../data/trade'
@@ -217,7 +218,7 @@ function FreightTab({ state, portId, ship, onChooseOffer, onChooseEmpty, onPrevi
               }}
             >
               <option value="">Valitse satama…</option>
-              {PORTS.filter((x) => x.id !== portId)
+              {openPorts(state.day).filter((x) => x.id !== portId)
                 .sort((a, b) => a.name.localeCompare(b.name, 'fi'))
                 .map((x) => {
                   const nm = getRoute(portId, x.id).nm
