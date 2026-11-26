@@ -2,7 +2,7 @@ import { getCanal } from '../data/canals'
 import { getPort } from '../data/ports'
 import { useState } from 'react'
 import { getShipType } from '../data/shipTypes'
-import { latePenalty, PACES, penaltyPerDay, planVoyage, voyageFuelValue, type Pace } from '../game/economy'
+import { PACES, penaltyPerDay, voyageEstimate, type Pace } from '../game/economy'
 import { fmtCost, fmtDay, fmtMoney, fmtNum } from '../game/format'
 import { getCargo } from '../game/market'
 import type { Contract, GameState } from '../game/types'
@@ -19,9 +19,9 @@ interface Props {
 export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel }: Props) {
   const ship = state.ships.find((s) => s.id === shipId)!
   const capacity = getShipType(ship.typeId).fuelCapacity
-  const options = PACES.map((p) => ({ pace: p, ...estimate(state, shipId, to, contract, p.id) }))
+  const options = PACES.map((p) => ({ pace: p, ...voyageEstimate(state, shipId, to, contract, p.id) }))
   const [pace, setPace] = useState<Pace>('normal')
-  const { plan, burned, arrivalDay, late, revenue, penalty, profit } = options.find((o) => o.pace.id === pace)!
+  const { plan, burned, arrivalDay, late, revenue, payBonus, penalty, profit } = options.find((o) => o.pace.id === pace)!
   const dateOf = (day: number) => fmtDay(state, day)
   const cashNeeded = plan.fuelCost + plan.canalTolls
 
@@ -88,6 +88,12 @@ export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel 
             <>
               <dt>Rahtimaksu</dt>
               <dd className="pos">{fmtMoney(revenue)}</dd>
+              {payBonus > 0 && (
+                <>
+                  <dt>Kapteenin kauppataito</dt>
+                  <dd className="pos">{fmtMoney(payBonus)}</dd>
+                </>
+              )}
             </>
           )}
           <dt>Polttoaine (kulutus)</dt>
@@ -129,14 +135,3 @@ export function VoyageDialog({ state, shipId, to, contract, onConfirm, onCancel 
   )
 }
 
-/** Days, costs and result of the voyage at one pace. */
-function estimate(state: GameState, shipId: string, to: string, contract: Contract | null, pace: Pace) {
-  const plan = planVoyage(state, shipId, to, pace)
-  const burned = voyageFuelValue(state, shipId, to, pace)
-  const arrivalDay = state.day + plan.arriveInDays
-  const late = contract ? arrivalDay - contract.deadlineDay : 0
-  const revenue = contract ? contract.pay : 0
-  const penalty = contract ? latePenalty(contract, late) : 0
-  const profit = revenue - (burned + plan.runningCost + plan.harbourFee + plan.canalTolls + penalty)
-  return { plan, burned, arrivalDay, late, revenue, penalty, profit }
-}

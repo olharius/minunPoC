@@ -25,6 +25,9 @@ import { SPEEDS, useClock } from './useClock'
 import { VoyageDialog } from './VoyageDialog'
 import { MilestoneDialog, YearReviewDialog } from './AwardDialogs'
 import { GoalsPanel } from './panels/GoalsPanel'
+import { OrdersDialog } from './OrdersDialog'
+import { setOrders } from '../game/orders'
+import { dismissCaptain, hireCaptain } from '../game/captains'
 import { WorldMap } from './WorldMap'
 
 interface Props {
@@ -53,6 +56,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [awards, setAwards] = useState<string[]>([])
   const [yearShown, setYearShown] = useState<number | null>(null)
+  const [ordersFor, setOrdersFor] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const noticeTimer = useRef(0)
 
@@ -94,7 +98,7 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
     }
   }
   const clock = useClock(
-    running && !pending && !purchase && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0 && idleQueue.length === 0 && awards.length === 0 && yearShown === null,
+    running && !pending && !purchase && !ordersFor && !state.bankrupt && !state.pendingEvent && dockQueue.length === 0 && idleQueue.length === 0 && awards.length === 0 && yearShown === null,
     speed,
     step,
   )
@@ -223,6 +227,8 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
                 if (l) setPurchase({ portId: l.portId, typeId: l.typeId, price: l.price, condition: l.condition, listingId: l.id, name: l.name })
               }}
               onPreview={setPreviewTo}
+              onHire={(shipId, captainId) => act(() => hireCaptain(state, shipId, captainId))}
+              onOrders={setOrdersFor}
             />
           ) : selection?.kind === 'ship' ? (
             <ShipPanel
@@ -231,6 +237,11 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
               time={time}
               onClose={() => setSelection(null)}
               onSelectPort={(id) => setSelection({ kind: 'port', id })}
+              onOrders={setOrdersFor}
+              onDismissCaptain={(shipId) => {
+                const c = state.ships.find((x) => x.id === shipId)?.captain
+                if (c && window.confirm(`Erotetaanko kapteeni ${c.name}? Kokemus menetetään.`)) act(() => dismissCaptain(state, shipId))
+              }}
             />
           ) : (
             <>
@@ -309,6 +320,21 @@ export function GameScreen({ state, onChange, onQuit }: Props) {
               return p.listingId ? buyUsedShip(funded, p.listingId, name) : buyNewShip(funded, p.portId, p.typeId, name)
             })
             flash(`${name.trim()} liittyi laivastoon!`)
+          }}
+        />
+      )}
+
+      {ordersFor && (
+        <OrdersDialog
+          state={state}
+          shipId={ordersFor}
+          onCancel={() => setOrdersFor(null)}
+          onSave={(o) => {
+            const id = ordersFor
+            setOrdersFor(null)
+            act(() => setOrders(state, id, o))
+            setIdleQueue((q) => q.filter((n) => n.shipId !== id))
+            flash(o ? (running ? 'Automaattiohjaus käynnissä.' : 'Automaattiohjaus käynnissä. Käynnistä aika ▶-painikkeesta.') : 'Laiva on taas käsiohjauksessa.')
           }}
         />
       )}
